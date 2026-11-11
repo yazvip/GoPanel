@@ -29,14 +29,14 @@ Langkah yang dilakukan skrip secara otomatis:
 1. **Instal Go** 1.26.3 bila belum ada.
 2. **Clone** repositori ke `/opt/gopanel`.
 3. **Build** binary (`go build -o gopanel ./cmd/gopanel`).
-4. **Buat** `config.json` di `/etc/gopanel/` dengan default produksi (listen `127.0.0.1:7800`, data di `/var/lib/gopanel`).
+4. **Buat** `config.json` di `/etc/gopanel/` dengan default produksi (listen `0.0.0.0:7800` agar panel bisa diakses dari luar VPS, data di `/var/lib/gopanel`).
 5. **Bootstrap** admin pertama — username `admin`, password acak 16 karakter (atau `GOPANEL_ADMIN_PASSWORD` bila di-set).
 6. **Aktifkan** service systemd `gopanel.service` (auto-start).
 7. **Tampilkan** username + password di akhir.
 
-Setelah install selesai, buka `http://127.0.0.1:7800` dan login dengan kredensial yang ditampilkan.
+Setelah install selesai, buka `http://<IP-VPS>:7800` (misalnya `http://1.2.3.4:7800`) dan login dengan kredensial yang ditampilkan. Skrip otomatis mendeteksi IP utama VPS dan menampilkannya.
 
-> ⚠️ **Keamanan:** password default dicetak ke stdout dan log. Ganti segera setelah login pertama, atau setel `GOPANEL_ADMIN_PASSWORD` sebelum install. Untuk produksi, gunakan TLS (lihat bagian [TLS panel](#tls-panel)) dan bind panel ke `127.0.0.1:7800` di belakang reverse proxy.
+> ⚠️ **Keamanan:** password default dicetak ke stdout dan log. Ganti segera setelah login pertama, atau setel `GOPANEL_ADMIN_PASSWORD` sebelum install. Untuk produksi, gunakan TLS (lihat bagian [TLS panel](#tls-panel)) dan bind panel ke `127.0.0.1:7800` di belakang reverse proxy. Jangan buka `0.0.0.0:7800` ke internet tanpa TLS.
 
 ## Fitur utama
 

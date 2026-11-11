@@ -93,7 +93,7 @@ write_config() {
   mkdir -p "$(dirname "$config_path")"
   cat > "$config_path" <<'EOF'
 {
-  "listen": "127.0.0.1:7800",
+  "listen": "0.0.0.0:7800",
   "data_dir": "/var/lib/gopanel",
   "db_path": "/var/lib/gopanel/panel.db",
   "log_level": "info",
@@ -132,7 +132,7 @@ write_config() {
   "secret_key_path": "/var/lib/gopanel/secret.key"
 }
 EOF
-  log "Config ditulis ke $config_path"
+  log "Config ditulis ke $config_path (listen 0.0.0.0:7800 — akses dari luar VPS)"
 }
 
 install_systemd_unit() {
@@ -218,15 +218,30 @@ bootstrap_panel() {
     echo $! > /var/run/gopanel.pid
   }
 
+  # Detect the VPS IP so the user can reach the panel from outside.
+  local panel_ip=""
+  if command -v hostname >/dev/null 2>&1; then
+    panel_ip="$(hostname -I 2>/dev/null | awk '{print $1}' || true)"
+  fi
+  if [ -z "$panel_ip" ] && command -v ip >/dev/null 2>&1; then
+    panel_ip="$(ip route get 1 2>/dev/null | awk '{print $7; exit}' || true)"
+  fi
+  [ -z "$panel_ip" ] && panel_ip="127.0.0.1"
+
   # Display credentials.
   echo ""
   echo "========================================="
   echo "   GoPanel terpasang! 🎉"
   echo "========================================="
   echo ""
-  echo "🌐 Panel URL:      http://127.0.0.1:7800"
+  echo "🌐 Panel URL:      http://${panel_ip}:7800"
   echo "🔑 Admin username: $found_user"
   echo "🔐 Admin password: $admin_pass"
+  echo ""
+  echo "⚠️  Catatan keamanan:"
+  echo "   - Panel diikat ke 0.0.0.0:7800 (HTTP tanpa TLS)."
+  echo "   - Akses hanya dari jaringan tepercaya; jangan buka ke internet."
+  echo "   - Gunakan reverse proxy + TLS (lihat Pengaturan) untuk produksi."
   echo ""
   echo "📝 Segera login dan ganti password melalui halaman Akun Saya."
   echo "   Atau setel GOPANEL_ADMIN_PASSWORD sebelum install untuk menentukan sendiri."
