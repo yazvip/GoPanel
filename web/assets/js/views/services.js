@@ -29,6 +29,17 @@ export async function render(ctx) {
     content,
   );
 
+  // Search input lives outside the card so typing does not recreate it (which
+  // would steal focus on every keystroke).
+  const searchInput = h('input', {
+    class: 'input search-input', type: 'search', placeholder: t('services.searchProcess'),
+  });
+  page.append(searchInput);
+    value: filter,
+    onInput: (ev) => { filter = ev.target.value; paintProcesses(); },
+  });
+  searchInput.addEventListener('focus', () => { /* keep focus stable */ });
+
   function switchTab(next) {
     tab = next;
     document.querySelectorAll('.tab').forEach((el) => el.classList.toggle('active', el.dataset.tab === next));
@@ -95,13 +106,10 @@ export async function render(ctx) {
         || String(proc.command || '').toLowerCase().includes(q)
         || String(proc.user || '').toLowerCase().includes(q);
     });
+    searchInput.value = filter;
     content.replaceChildren(card({
       flush: true,
-      actions: h('input', {
-        class: 'input search-input', type: 'search', placeholder: t('services.searchProcess'),
-        value: filter,
-        onInput: (ev) => { filter = ev.target.value; paintProcesses(); },
-      }),
+      actions: searchInput,
       body: list.length ? dataTable([
         { label: t('services.pid'), className: 'w-80', render: (p) => h('span', { class: 'mono' }, p.pid) },
         { label: t('services.name'), render: (p) => h('div', {},

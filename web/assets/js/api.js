@@ -1,3 +1,5 @@
+import { t } from './i18n.js';
+
 const PREFIX = '/api/v1';
 
 export class ApiError extends Error {
@@ -74,7 +76,7 @@ async function request(path, options = {}) {
   });
   if (res.status === 401 && !isPublic(path)) {
     if (unauthorizedHandler) unauthorizedHandler();
-    throw new ApiError('Your session has expired. Sign in again.', 'auth.required', 401);
+    throw new ApiError(t('auth.sessionExpired'), 'auth.required', 401);
   }
   return parseResponse(res);
 }

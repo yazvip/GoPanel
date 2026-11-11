@@ -1,6 +1,6 @@
 import { loadingBlock } from './ui.js';
 
-export function createRouter({ outlet, routes, onNavigate, onError }) {
+export function createRouter({ outlet, routes, onNavigate, onError, guard }) {
   let cleanup = null;
   let token = 0;
 
@@ -42,6 +42,21 @@ export function createRouter({ outlet, routes, onNavigate, onError }) {
       if (onNavigate) onNavigate(path, null);
       outlet.replaceChildren(loadingBlock('Page not found'));
       return;
+    }
+    if (typeof guard === 'function') {
+      const decision = guard(found.route, path);
+      if (decision) {
+        if (typeof decision === 'string') {
+          location.hash = `#${decision}`;
+          return;
+        }
+        if (decision.el instanceof Node) {
+          outlet.replaceChildren(decision.el);
+          return;
+        }
+        outlet.replaceChildren(loadingBlock(decision.message || 'Access denied'));
+        return;
+      }
     }
     if (onNavigate) onNavigate(path, found.route);
     outlet.replaceChildren(loadingBlock());

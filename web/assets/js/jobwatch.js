@@ -2,13 +2,15 @@ const EVENTS = ['snapshot', 'update', 'progress', 'log', 'done', 'error'];
 
 export function watchJob(id, { onSnapshot, onProgress, onLog, onDone, onError } = {}) {
   if (!id) return () => {};
-  const source = new EventSource(`/api/v1/jobs/${encodeURIComponent(id)}/events`);
+  const url = `/api/v1/jobs/${encodeURIComponent(id)}/events`;
   let closed = false;
+  let attempts = 0;
+  let source = null;
 
   const close = () => {
     if (closed) return;
     closed = true;
-    source.close();
+    if (source) source.close();
   };
 
   const parse = (ev) => {
@@ -19,49 +21,67 @@ export function watchJob(id, { onSnapshot, onProgress, onLog, onDone, onError } 
     }
   };
 
-  for (const name of EVENTS) {
-    source.addEventListener(name, (ev) => {
-      const data = parse(ev);
-      if (name === 'snapshot') {
-        if (onSnapshot) onSnapshot(data);
-        if (data.status === 'success' || data.status === 'failed') {
+  function attach(s) {
+    source = s;
+    for (const name of EVENTS) {
+      s.addEventListener(name, (ev) => {
+        const data = parse(ev);
+        if (name === 'snapshot') {
+          if (onSnapshot) onSnapshot(data);
+          if (data.status === 'success' || data.status === 'failed') {
+            if (onDone) onDone(data);
+            close();
+          }
+          return;
+        }
+        if (name === 'update') {
+          if (data.line && onLog) onLog(data.line);
+          if (data.line === undefined && onProgress
+            && (data.progress !== undefined || data.message !== undefined)) onProgress(data);
+          return;
+        }
+        if (name === 'progress') {
+          if (onProgress) onProgress(data);
+          return;
+        }
+        if (name === 'log') {
+          if (onLog) onLog(data.line || '');
+          return;
+        }
+        if (name === 'done') {
           if (onDone) onDone(data);
           close();
+          return;
         }
+        if (name === 'error') {
+          if (onError) onError(data);
+          close();
+        }
+      });
+    }
+    s.onerror = () => {
+      if (closed) return;
+      // EventSource reconnects by itself, so a transport error is usually
+      // transient. Give the server a few chances to come back before giving up.
+      attempts += 1;
+      if (attempts < 5) {
+        setTimeout(() => {
+          if (closed) return;
+          reconnect();
+        }, 2000);
         return;
       }
-      if (name === 'update') {
-        if (data.line && onLog) onLog(data.line);
-        if (data.line === undefined && onProgress
-          && (data.progress !== undefined || data.message !== undefined)) onProgress(data);
-        return;
-      }
-      if (name === 'progress') {
-        if (onProgress) onProgress(data);
-        return;
-      }
-      if (name === 'log') {
-        if (onLog) onLog(data.line || '');
-        return;
-      }
-      if (name === 'done') {
-        if (onDone) onDone(data);
-        close();
-        return;
-      }
-      if (name === 'error') {
-        if (onError) onError(data);
-        close();
-      }
-    });
+      close();
+      if (onError) onError({ error: 'connection lost' });
+    };
   }
 
-  source.onerror = () => {
+  function reconnect() {
     if (closed) return;
-    close();
-    if (onError) onError({ error: 'connection lost' });
-  };
+    attach(new EventSource(url));
+  }
 
+  attach(new EventSource(url));
   return close;
 }
 

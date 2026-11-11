@@ -152,12 +152,13 @@ export function iconButton(name, title, onClick, cls = '') {
   return h('button', { class: `icon-btn ${cls}`, title, 'aria-label': title, onClick }, iconSpan(name, 16));
 }
 
-export function button(label, { variant = '', size = '', icon: iconName, onClick, type = 'button', disabled = false, class: cls = '' } = {}) {
+export function button(label, { variant = '', size = '', icon: iconName, onClick, type = 'button', disabled = false, class: cls = '', title = '' } = {}) {
   return h('button', {
     class: `btn ${variant ? `btn-${variant}` : ''} ${size ? `btn-${size}` : ''} ${cls}`.trim(),
     type,
     disabled,
     onClick,
+    title,
   }, iconName ? iconSpan(iconName, 15) : null, label);
 }
 

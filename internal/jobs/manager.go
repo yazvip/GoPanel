@@ -465,3 +465,34 @@ func (m *Manager) openLog(id string) (*os.File, error) {
 	}
 	return os.OpenFile(filepath.Join(dir, id+".log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o640)
 }
+
+// PruneJobLogs removes job log files older than before. It is called by the
+// scheduler retention pass and never returns an error when the directory is
+// missing (the panel was just started).
+func (m *Manager) PruneJobLogs(ctx context.Context, before time.Time) (int, error) {
+	dir := filepath.Join(m.logDir, "jobs")
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return 0, nil
+		}
+		return 0, err
+	}
+	cutoff := before.Unix()
+	var n int
+	for _, e := range entries {
+		if e.IsDir() || filepath.Ext(e.Name()) != ".log" {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		if info.ModTime().Unix() < cutoff {
+			if err := os.Remove(filepath.Join(dir, e.Name())); err == nil {
+				n++
+			}
+		}
+	}
+	return n, nil
+}

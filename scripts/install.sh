@@ -1,99 +1,161 @@
 #!/usr/bin/env bash
 #
-# GoPanel VPS Installer — aaPanel style: git clone + run, done.
+# GoPanel VPS Installer — aaPanel style: one command, clone, build, run.
 #
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/yazvip/GoPanel/main/scripts/install.sh | sudo bash -
-#   GOPANEL_ADMIN_PASSWORD="xxxxxxxxxxxx" sudo bash scripts/install.sh
+#   GOPANEL_ADMIN_PASSWORD="password-panjang-anda" sudo bash scripts/install.sh
+#
+# Environment overrides:
+#   GOPANEL_ADMIN_PASSWORD   Password admin pertama (default: acak 16 karakter)
+#   GOPANEL_INSTALL_DIR      Direktori instalasi (default: /opt/gopanel)
+#   GOPANEL_CONFIG           Path config (default: /etc/gopanel/config.json)
+#   GOPANEL_PORT             Port panel (default: 7800)
+#   GOPANEL_REPO_URL         URL repo git (default: https://github.com/yazvip/GoPanel.git)
 #
 # Defaults:
 #   - Install dir: /opt/gopanel
 #   - Config: /etc/gopanel/config.json
-#   - Listen: 127.0.0.1:7800 (HTTP). TLS/SSL must be added later via Pengaturan.
-#   - Bootstrap admin: user "admin", password from GOPANEL_ADMIN_PASSWORD env
-#     or auto-generated 16-char random password.
+#   - Listen: 0.0.0.0:7800 (HTTP). Pasang TLS lewat Pengaturan / reverse proxy.
+#   - Admin pertama: user "admin"; password dari GOPANEL_ADMIN_PASSWORD atau acak.
 
 set -euo pipefail
 
+GO_VERSION="${GOPANEL_GO_VERSION:-1.26.3}"
+INSTALL_DIR="${GOPANEL_INSTALL_DIR:-/opt/gopanel}"
+CONFIG_PATH="${GOPANEL_CONFIG:-/etc/gopanel/config.json}"
+PANEL_PORT="${GOPANEL_PORT:-7800}"
+REPO_URL="${GOPANEL_REPO_URL:-${1:-https://github.com/yazvip/GoPanel.git}}"
+
 ###############################################################################
-# Helpers
+# Output helpers
 ###############################################################################
-log()   { printf '\n[%s] %s\n' "$(date '+%H:%M:%S')" "$*" ; }
-ok()    { printf '\n\033[32m✅ %s\033[0m\n' "$*" ; }
-warn()  { printf '\n\033[33m⚠️  %s\033[0m\n' "$*" ; }
-err()   { printf '\033[31m❌ %s\033[0m\n' "$*" >&2 ; }
+log()  { printf '\n[%s] %s\n' "$(date '+%H:%M:%S')" "$*"; }
+ok()   { printf '\n\033[32m✅ %s\033[0m\n' "$*"; }
+warn() { printf '\n\033[33m⚠️  %s\033[0m\n' "$*"; }
+err()  { printf '\033[31m❌ %s\033[0m\n' "$*" >&2; }
+die()  { err "$*"; exit 1; }
 
 confirm_root() {
-  if [ "$(id -u)" -ne 0 ]; then
-    err "Installer harus dijalankan sebagai root (sudo)."
-    exit 1
-  fi
+  [ "$(id -u)" -eq 0 ] || die "Installer harus dijalankan sebagai root (sudo)."
 }
 
 detect_os() {
   if [ -f /etc/os-release ]; then
+    # shellcheck disable=SC1091
     . /etc/os-release
     OS_NAME="${PRETTY_NAME:-${NAME:-Unknown}}"
     OS_ID="${ID:-unknown}"
-    OS_VERSION="${VERSION_ID:-}"
   else
-    OS_NAME="Unknown"; OS_ID="unknown"; OS_VERSION=""
+    OS_NAME="Unknown"; OS_ID="unknown"
   fi
+}
+
+have_systemd() {
+  command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]
+}
+
+download() { # url dest
+  local url="$1" dest="$2"
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsSL --retry 3 --connect-timeout 20 -o "$dest" "$url"
+  elif command -v wget >/dev/null 2>&1; then
+    wget -qO "$dest" "$url"
+  else
+    die "curl atau wget diperlukan untuk mengunduh $url"
+  fi
+}
+
+http_get() { # url (silent, no output on failure)
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsS --max-time 5 "$1" >/dev/null 2>&1
+  elif command -v wget >/dev/null 2>&1; then
+    wget -q --timeout=5 -O /dev/null "$1" >/dev/null 2>&1
+  else
+    return 1
+  fi
+}
+
+ensure_apt_packages() {
+  local missing=()
+  local pkg
+  for pkg in "$@"; do
+    command -v "$pkg" >/dev/null 2>&1 || missing+=("$pkg")
+  done
+  [ ${#missing[@]} -eq 0 ] && return 0
+  case "$OS_ID" in
+    ubuntu|debian)
+      log "Memasang paket: ${missing[*]}"
+      export DEBIAN_FRONTEND=noninteractive
+      apt-get update -qq || die "apt-get update gagal"
+      apt-get install -y -qq "${missing[@]}" || die "Gagal memasang paket: ${missing[*]}"
+      ;;
+    *)
+      die "Paket berikut wajib terpasang: ${missing[*]} (OS: $OS_NAME)"
+      ;;
+  esac
+}
+
+go_version_ok() {
+  local v major minor
+  v="$(go env GOVERSION 2>/dev/null || true)"
+  v="${v#go}"
+  [ -n "$v" ] || return 1
+  # shellcheck disable=SC2086
+  set -- $(printf '%s' "${v%%-*}" | tr '.' ' ')
+  major="${1:-0}"; minor="${2:-0}"
+  [ "$major" -gt 1 ] && return 0
+  [ "$major" -eq 1 ] && [ "$minor" -ge 26 ] && return 0
+  return 1
 }
 
 ensure_go() {
   if command -v go >/dev/null 2>&1; then
-    log "Go sudah terpasang: $(go version)"
-    return 0
+    if go_version_ok; then
+      log "Go sudah terpasang: $(go version)"
+      return 0
+    fi
+    warn "Versi Go terpasang terlalu lama ($(go version)); memasang Go ${GO_VERSION}..."
+  else
+    log "Go belum terdeteksi, mengunduh Go ${GO_VERSION}..."
   fi
 
-  log "Go belum terdeteksi, mengunduh Go 1.26.3..."
-  GO_VERSION="1.26.3"
-  GO_TAR="go${GO_VERSION}.linux-amd64.tar.gz"
-  tmp_tar="$(mktemp)"
-  wget -qO "$tmp_tar" "https://go.dev/dl/${GO_TAR}" || {
-    err "Gagal mengunduh Go dari https://go.dev/dl/${GO_TAR}"
-    rm -f "$tmp_tar"
-    exit 1
-  }
-  rm -rf /usr/local/go
-  tar -C /usr/local -xzf "$tmp_tar"
-  rm -f "$tmp_tar"
-  export PATH=/usr/local/go/bin:$PATH
-  log "Go dipasang: $(go version)"
-}
-
-ensure_git() {
-  if command -v git >/dev/null 2>&1; then return 0; fi
-  log "git belum terpasang, memasang git..."
-  case "$OS_ID" in
-    ubuntu|debian)
-      apt-get update -qq && apt-get install -y -qq git
-      ;;
-    *)
-      err "git wajib terpasang terlebih dahulu pada $OS_NAME."
-      exit 1
-      ;;
+  local arch tar_tmp
+  case "$(uname -m)" in
+    x86_64|amd64)   arch="amd64" ;;
+    aarch64|arm64)  arch="arm64" ;;
+    armv7l|armv6l)  arch="armv6l" ;;
+    *)              die "Arsitektur $(uname -m) tidak didukung untuk unduhan Go otomatis." ;;
   esac
+
+  tar_tmp="$(mktemp)"
+  download "https://go.dev/dl/go${GO_VERSION}.linux-${arch}.tar.gz" "$tar_tmp" \
+    || die "Gagal mengunduh Go dari https://go.dev/dl/go${GO_VERSION}.linux-${arch}.tar.gz"
+  rm -rf /usr/local/go
+  tar -C /usr/local -xzf "$tar_tmp"
+  rm -f "$tar_tmp"
+  export PATH="/usr/local/go/bin:$PATH"
+  command -v go >/dev/null 2>&1 || die "Instalasi Go gagal: binary go tidak ditemukan di /usr/local/go/bin"
+  log "Go dipasang: $(go version)"
 }
 
 generate_password() {
   if command -v openssl >/dev/null 2>&1; then
     openssl rand -hex 8
-  elif command -v tr >/dev/null 2>&1 && command -v head >/dev/null 2>&1; then
+  elif command -v tr >/dev/null 2>&1; then
     tr -dc 'a-f0-9' < /dev/urandom | head -c 16
   else
-    err "Tidak dapat menghasilkan password acak."
-    exit 1
+    die "Tidak dapat menghasilkan password acak (openssl/tr tidak tersedia)."
   fi
 }
 
 write_config() {
-  local config_path="$1"
-  mkdir -p "$(dirname "$config_path")"
-  cat > "$config_path" <<'EOF'
+  [ -f "$CONFIG_PATH" ] && { log "Config sudah ada, mempertahankan $CONFIG_PATH"; return 0; }
+  mkdir -p "$(dirname "$CONFIG_PATH")"
+  umask 077
+  cat > "$CONFIG_PATH" <<EOF
 {
-  "listen": "0.0.0.0:7800",
+  "listen": "0.0.0.0:${PANEL_PORT}",
   "data_dir": "/var/lib/gopanel",
   "db_path": "/var/lib/gopanel/panel.db",
   "log_level": "info",
@@ -132,12 +194,13 @@ write_config() {
   "secret_key_path": "/var/lib/gopanel/secret.key"
 }
 EOF
-  log "Config ditulis ke $config_path (listen 0.0.0.0:7800 — akses dari luar VPS)"
+  umask 022
+  log "Config ditulis ke $CONFIG_PATH (listen 0.0.0.0:${PANEL_PORT})"
 }
 
-install_systemd_unit() {
+write_systemd_unit() {
   local unit_path="/etc/systemd/system/gopanel.service"
-  cat > "$unit_path" <<'EOF'
+  cat > "$unit_path" <<EOF
 [Unit]
 Description=GoPanel VPS Control Panel
 After=network.target
@@ -145,111 +208,165 @@ After=network.target
 [Service]
 Type=simple
 EnvironmentFile=-/etc/default/gopanel
-ExecStart=/opt/gopanel/gopanel -config /etc/gopanel/config.json
+ExecStart=${INSTALL_DIR}/gopanel -config ${CONFIG_PATH}
 Restart=on-failure
 RestartSec=5
-WorkingDirectory=/opt/gopanel
+WorkingDirectory=${INSTALL_DIR}
 User=root
 Group=root
+LimitNOFILE=65536
 
 [Install]
 WantedBy=multi-user.target
 EOF
   log "Unit systemd ditulis ke $unit_path"
-  systemctl daemon-reload
-  systemctl enable gopanel.service
-  log "systemd: gopanel.service diaktifkan"
 }
 
-bootstrap_panel() {
-  local install_dir="$1"
-  local config_path="$2"
-  local admin_pass="$3"
+stop_running_panel() {
+  if have_systemd && systemctl list-unit-files gopanel.service >/dev/null 2>&1; then
+    systemctl stop gopanel.service >/dev/null 2>&1 || true
+  fi
+  if [ -f /var/run/gopanel.pid ]; then
+    local old_pid
+    old_pid="$(cat /var/run/gopanel.pid 2>/dev/null || true)"
+    if [ -n "$old_pid" ] && kill -0 "$old_pid" 2>/dev/null; then
+      kill "$old_pid" 2>/dev/null || true
+      sleep 1
+    fi
+    rm -f /var/run/gopanel.pid
+  fi
+  # Tunggu port benar-benar bebas (maks 10 detik).
+  local i
+  for i in $(seq 1 10); do
+    if ! (exec 3<>"/dev/tcp/127.0.0.1/${PANEL_PORT}") 2>/dev/null; then
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
+}
 
-  # Start panel once to bootstrap the first admin; capture output for password.
-  local bootstrap_log
+bootstrap_admin() {
+  local admin_pass="$1"
+  local bootstrap_log pid ready found_user found_pass
+
   bootstrap_log="$(mktemp)"
   GOPANEL_ADMIN_PASSWORD="$admin_pass" \
-    "$install_dir/gopanel" -config "$config_path" > "$bootstrap_log" 2>&1 &
-  local pid=$!
+    "$INSTALL_DIR/gopanel" -config "$CONFIG_PATH" >"$bootstrap_log" 2>&1 &
+  pid=$!
 
-  # Wait for /auth/me to accept unauthenticated? No — admin is created, login works.
-  # The panel may exit after starting (it keeps running). Wait briefly.
-  log "Menunggu panel siap (maksimal 30 detik)..."
-  local ready=0
+  log "Menunggu panel menyala (maksimal 30 detik)..."
+  ready=0
+  local i
   for i in $(seq 1 30); do
     if kill -0 "$pid" 2>/dev/null; then
-      # Panel still running — check if we can see bootstrap output yet
-      if grep -q "GoPanel first administrator" "$bootstrap_log" 2>/dev/null || \
-         grep -q "listening" "$bootstrap_log" 2>/dev/null; then
+      if grep -q "GoPanel first administrator" "$bootstrap_log" 2>/dev/null \
+         || grep -q "gopanel listening" "$bootstrap_log" 2>/dev/null; then
         ready=1
         break
       fi
       sleep 1
     else
-      wait "$pid" || true
+      wait "$pid" 2>/dev/null || true
       break
     fi
   done
 
-  # Kill the foreground bootstrap process; we'll start via systemd.
   if kill -0 "$pid" 2>/dev/null; then
     kill "$pid" 2>/dev/null || true
     wait "$pid" 2>/dev/null || true
   fi
 
-  # Try to extract bootstrap credentials from log.
-  local found_user="admin"
-  local found_pass=""
-  if [ -f "$bootstrap_log" ]; then
-    found_pass="$(grep -oP '(?<=password: )\S+' "$bootstrap_log" | head -1 || true)"
-    found_user="$(grep -oP '(?<=username: )\S+' "$bootstrap_log" | head -1 || echo "admin")"
+  if [ "$ready" -ne 1 ]; then
+    err "Panel gagal start saat bootstrap. Cuplikan log:"
+    sed -n '1,40p' "$bootstrap_log" >&2 || true
+    rm -f "$bootstrap_log"
+    return 1
   fi
+
+  # Ambil kredensial bila admin baru dibuat. Baris dari main.go:
+  #   GoPanel first administrator
+  #   username: admin
+  #   password: xxxx
+  found_user="admin"
+  found_pass=""
+  found_pass="$(sed -n 's/^[[:space:]]*password: \([^[:space:]]*\).*/\1/p' "$bootstrap_log" | head -1)"
+  local user_line
+  user_line="$(sed -n 's/^[[:space:]]*username: \([^[:space:]]*\).*/\1/p' "$bootstrap_log" | head -1)"
+  [ -n "$user_line" ] && found_user="$user_line"
   rm -f "$bootstrap_log"
 
-  if [ -n "$found_pass" ]; then
-    admin_pass="$found_pass"
+  BOOTSTRAP_USER="$found_user"
+  BOOTSTRAP_PASS="$found_pass"
+  return 0
+}
+
+start_panel_service() {
+  if have_systemd; then
+    systemctl daemon-reload
+    systemctl enable gopanel.service >/dev/null 2>&1 || warn "systemctl enable gagal"
+    systemctl restart gopanel.service || die "systemctl start gopanel gagal (lihat: journalctl -u gopanel -n 50)"
+  else
+    warn "systemd tidak tersedia; menjalankan panel dengan nohup."
+    mkdir -p /var/log
+    nohup "$INSTALL_DIR/gopanel" -config "$CONFIG_PATH" >>/var/log/gopanel.log 2>&1 &
+    echo $! >/var/run/gopanel.pid
   fi
+}
 
-  # Start via systemd for persistent operation.
-  systemctl start gopanel.service || {
-    warn "systemctl start gagal, mencoba nohup fallback..."
-    nohup "$install_dir/gopanel" -config "$config_path" > /var/log/gopanel.log 2>&1 &
-    echo $! > /var/run/gopanel.pid
-  }
+wait_health() {
+  local i
+  for i in $(seq 1 20); do
+    if http_get "http://127.0.0.1:${PANEL_PORT}/api/v1/healthz"; then
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
+}
 
-  # Detect the VPS IP so the user can reach the panel from outside.
-  local panel_ip=""
+detect_public_ip() {
+  local ip=""
   if command -v hostname >/dev/null 2>&1; then
-    panel_ip="$(hostname -I 2>/dev/null | awk '{print $1}' || true)"
+    ip="$(hostname -I 2>/dev/null | awk '{print $1}' || true)"
   fi
-  if [ -z "$panel_ip" ] && command -v ip >/dev/null 2>&1; then
-    panel_ip="$(ip route get 1 2>/dev/null | awk '{print $7; exit}' || true)"
+  if [ -z "$ip" ] && command -v ip >/dev/null 2>&1; then
+    ip="$(ip route get 1 2>/dev/null | awk '{print $7; exit}' || true)"
   fi
-  [ -z "$panel_ip" ] && panel_ip="127.0.0.1"
+  printf '%s' "${ip:-127.0.0.1}"
+}
 
-  # Display credentials.
+show_summary() {
+  local panel_ip="$1" user="$2" pass="$3" existing="$4"
   echo ""
   echo "========================================="
   echo "   GoPanel terpasang! 🎉"
   echo "========================================="
   echo ""
-  echo "🌐 Panel URL:      http://${panel_ip}:7800"
-  echo "🔑 Admin username: $found_user"
-  echo "🔐 Admin password: $admin_pass"
+  echo "🌐 Panel URL:      http://${panel_ip}:${PANEL_PORT}"
+  echo "🔑 Admin username: ${user}"
+  if [ "$existing" = "1" ]; then
+    echo "🔐 Admin password: (sudah ada sebelumnya — gunakan password lama)"
+    echo ""
+    echo "ℹ️  Instalasi yang sudah ada terdeteksi. Password tidak diubah."
+    echo "   Lupa password? Reset dari server:"
+    echo "   sudo /opt/gopanel/gopanel -config /etc/gopanel/config.json -reset-admin"
+  else
+    echo "🔐 Admin password: ${pass}"
+    echo ""
+    echo "📝 Segera login dan ganti password melalui halaman Akun Saya."
+    echo "   Atau setel GOPANEL_ADMIN_PASSWORD sebelum install untuk menentukan sendiri."
+  fi
   echo ""
   echo "⚠️  Catatan keamanan:"
-  echo "   - Panel diikat ke 0.0.0.0:7800 (HTTP tanpa TLS)."
-  echo "   - Akses hanya dari jaringan tepercaya; jangan buka ke internet."
-  echo "   - Gunakan reverse proxy + TLS (lihat Pengaturan) untuk produksi."
-  echo ""
-  echo "📝 Segera login dan ganti password melalui halaman Akun Saya."
-  echo "   Atau setel GOPANEL_ADMIN_PASSWORD sebelum install untuk menentukan sendiri."
+  echo "   - Panel listen di 0.0.0.0:${PANEL_PORT} (HTTP tanpa TLS)."
+  echo "   - Batasi akses lewat firewall / reverse proxy + TLS."
   echo ""
   echo "🛠️  Perintah berguna:"
-  echo "   - Log panel:     journalctl -u gopanel -f"
-  echo "   - Stop panel:    systemctl stop gopanel"
-  echo "   - Restart panel: systemctl restart gopanel"
+  echo "   - Status:        systemctl status gopanel"
+  echo "   - Log:           journalctl -u gopanel -f"
+  echo "   - Restart:       systemctl restart gopanel"
+  echo "   - Upgrade:       sudo bash ${INSTALL_DIR}/scripts/install.sh"
   echo ""
   echo "========================================="
 }
@@ -257,42 +374,63 @@ bootstrap_panel() {
 main() {
   confirm_root
   detect_os
-  log "GoPanel VPS Installer dimulai pada $OS_NAME ($OS_VERSION)"
+  log "GoPanel VPS Installer — ${OS_NAME}"
+  log "Repo: ${REPO_URL}"
+  log "Install ke: ${INSTALL_DIR}"
 
-  # Repo URL: first arg overrides; else GOPANEL_REPO_URL env; else default.
-  local repo_url="${1:-${GO_PANEL_REPO_URL:-https://github.com/yazvip/GoPanel.git}}"
-  local install_dir="/opt/gopanel"
-  local config_path="/etc/gopanel/config.json"
-
-  log "Repo: $repo_url"
-  log "Install ke: $install_dir"
-
+  ensure_apt_packages git curl
   ensure_go
-  ensure_git
 
-  if [ -d "$install_dir/.git" ]; then
-    log "Direktori $install_dir sudah ada, mencoba git pull..."
-    git -C "$install_dir" pull --ff-only || true
+  if [ -d "$INSTALL_DIR/.git" ]; then
+    log "Direktori ${INSTALL_DIR} sudah ada, memperbarui..."
+    git -C "$INSTALL_DIR" fetch --all --prune \
+      && git -C "$INSTALL_DIR" reset --hard origin/main >/dev/null \
+      || warn "Pembaruan repo gagal; memakai checkout yang ada."
+  elif [ -d "$INSTALL_DIR" ] && [ -n "$(ls -A "$INSTALL_DIR" 2>/dev/null)" ]; then
+    die "${INSTALL_DIR} sudah ada dan bukan repo git. Pindahkan/hapus dulu, lalu jalankan ulang."
   else
     log "Mengkloning repositori..."
-    git clone "$repo_url" "$install_dir"
+    git clone --depth 1 "$REPO_URL" "$INSTALL_DIR" || die "git clone gagal"
   fi
 
-  cd "$install_dir"
+  [ -f "$INSTALL_DIR/go.mod" ] || die "go.mod tidak ditemukan di ${INSTALL_DIR}; clone tidak lengkap."
 
-  log "Membangun binary GoPanel..."
-  go build -o gopanel ./cmd/gopanel
+  cd "$INSTALL_DIR"
+  local version
+  version="$(git -C "$INSTALL_DIR" describe --tags --always 2>/dev/null || echo dev)"
+  log "Membangun binary GoPanel (versi ${version})..."
+  go build -trimpath -ldflags "-s -w -X main.version=${version}" -o gopanel ./cmd/gopanel \
+    || die "Build gagal. Pastikan Go >= ${GO_VERSION} dan koneksi internet tersedia."
 
-  write_config "$config_path"
+  write_config
+  write_systemd_unit
 
-  # Determine bootstrap admin password.
   local admin_pass="${GOPANEL_ADMIN_PASSWORD:-}"
   if [ -z "$admin_pass" ]; then
     admin_pass="$(generate_password)"
   fi
 
-  install_systemd_unit
-  bootstrap_panel "$install_dir" "$config_path" "$admin_pass"
+  local existing=0
+  stop_running_panel \
+    || die "Port ${PANEL_PORT} masih dipakai proses lain. Hentikan proses tersebut lalu jalankan ulang installer."
+  bootstrap_admin "$admin_pass" \
+    || die "Bootstrap admin gagal — lihat cuplikan log di atas."
+  [ -n "${BOOTSTRAP_PASS:-}" ] || existing=1
+
+  start_panel_service
+
+  if ! wait_health; then
+    err "Panel tidak merespons di http://127.0.0.1:${PANEL_PORT}/api/v1/healthz"
+    if have_systemd; then
+      journalctl -u gopanel -n 40 --no-pager >&2 || true
+    else
+      tail -n 40 /var/log/gopanel.log >&2 || true
+    fi
+    exit 1
+  fi
+  ok "Panel merespons dan siap digunakan."
+
+  show_summary "$(detect_public_ip)" "${BOOTSTRAP_USER:-admin}" "${BOOTSTRAP_PASS:-$admin_pass}" "$existing"
 }
 
 main "$@"

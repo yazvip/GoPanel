@@ -287,7 +287,8 @@ export class TerminalEmulator {
   clearLine(row, mode) {
     const line = this.screen[row];
     if (!line) return;
-    const from = mode === 1 ? 0 : this.cursor.x;
+    // ANSI: 0 = cursor..end, 1 = start..cursor, 2 = whole line
+    const from = mode === 1 ? 0 : mode === 2 ? 0 : this.cursor.x;
     const to = mode === 0 ? this.cols - 1 : mode === 2 ? this.cols - 1 : this.cursor.x;
     for (let x = from; x <= to; x += 1) line[x] = blankCell();
   }

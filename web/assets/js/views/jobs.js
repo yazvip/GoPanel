@@ -76,8 +76,8 @@ export async function render(ctx) {
   function duration(job) {
     if (!job.started_at) return '—';
     if (!job.finished_at) return t('jobs.running');
-    const start = new Date(job.started_at).getTime();
-    const end = new Date(job.finished_at).getTime();
+    const start = new Date(Number(job.started_at) * 1000).getTime();
+    const end = new Date(Number(job.finished_at) * 1000).getTime();
     if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return '—';
     return formatDuration(Math.round((end - start) / 1000));
   }

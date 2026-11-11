@@ -184,6 +184,13 @@ function renderShell() {
   router = createRouter({
     outlet,
     routes: ROUTES,
+    guard: (route, path) => {
+      if (route.admin && !isAdmin()) return { message: t('auth.forbidden') || 'Access denied' };
+      if (route.capability && !state.capabilities[route.capability]) {
+        return { message: t('auth.forbidden') || 'Access denied' };
+      }
+      return null;
+    },
     onNavigate: (path, route) => {
       state.routeTitle = route ? t(route.key) : '';
       document.title = `${state.routeTitle ? `${state.routeTitle} · ` : ''}${state.panelName}`;

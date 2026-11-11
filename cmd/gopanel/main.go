@@ -30,6 +30,7 @@ import (
 	"gopanel/internal/httpapi"
 	"gopanel/internal/jobs"
 	"gopanel/internal/metrics"
+	"gopanel/internal/model"
 	"gopanel/internal/scheduler"
 	"gopanel/internal/sites"
 	"gopanel/internal/store"
@@ -52,6 +53,7 @@ func run() error {
 		dev         = flag.Bool("dev", false, "development mode with fake system data")
 		listen      = flag.String("listen", "", "override the listen address")
 		showVersion = flag.Bool("version", false, "print the version and exit")
+		resetAdmin  = flag.Bool("reset-admin", false, "reset the administrator password and exit (stop the service first)")
 	)
 	flag.Parse()
 	if *showVersion {
@@ -80,6 +82,10 @@ func run() error {
 	defer database.Close()
 	st := store.New(database)
 
+	if *resetAdmin {
+		return resetAdminPassword(st)
+	}
+
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
@@ -88,6 +94,11 @@ func run() error {
 	}
 
 	system := factory.New(cfg)
+	backupService, err := backup.New(st, system, logger, backup.Options{Dir: cfg.BackupDir, SiteRootBase: cfg.SiteRootBase})
+	if err != nil {
+		return fmt.Errorf("backup service: %w", err)
+	}
+	backupService.MarkInterrupted(ctx)
 	authService := auth.New(st, key, secureCookies(cfg), time.Duration(cfg.SessionIdleHours)*time.Hour, time.Duration(cfg.SessionAbsoluteHours)*time.Hour)
 
 	adminUser, adminPassword, created, err := authService.EnsureFirstAdmin(ctx, cfg.Dev, os.Getenv("GOPANEL_ADMIN_PASSWORD"))
@@ -117,10 +128,6 @@ func run() error {
 	})
 
 	jobManager := jobs.New(st, cfg.LogDir, 3, logger)
-	backupService, err := backup.New(st, system, logger, backup.Options{Dir: cfg.BackupDir, SiteRootBase: cfg.SiteRootBase})
-	if err != nil {
-		return fmt.Errorf("backup service: %w", err)
-	}
 	cronService := cronjobs.New(st, system, logger, cronjobs.Options{CronFile: cfg.CronFile, LogDir: cfg.LogDir})
 	appService := apps.New(system, logger)
 
@@ -296,4 +303,54 @@ func resolveTLS(ctx context.Context, st *store.Store, cfg *config.Config) (strin
 		return "", "", err
 	}
 	return certFile, keyFile, nil
+}
+
+// resetAdminPassword implements `gopanel -reset-admin`: it sets a new password
+// for the administrator account, forces a password change at next login, and
+// invalidates every existing session. It is meant to be run from a root shell
+// while the panel service is stopped.
+func resetAdminPassword(st *store.Store) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	password := os.Getenv("GOPANEL_ADMIN_PASSWORD")
+	if password == "" {
+		password = auth.GeneratePassword(16)
+		if password == "" {
+			return errors.New("could not generate a random password")
+		}
+	}
+
+	user, err := st.GetUserByUsername(ctx, "admin")
+	if err != nil {
+		users, listErr := st.ListUsers(ctx)
+		if listErr != nil {
+			return fmt.Errorf("look up administrator: %w", err)
+		}
+		var found *model.User
+		for i := range users {
+			if users[i].Role == "admin" {
+				found = &users[i]
+				break
+			}
+		}
+		if found == nil {
+			return fmt.Errorf("no administrator account found: %w", err)
+		}
+		user = found
+	}
+
+	hash, err := auth.HashPassword(password)
+	if err != nil {
+		return err
+	}
+	if err := st.UpdatePassword(ctx, user.ID, hash, true); err != nil {
+		return fmt.Errorf("update password: %w", err)
+	}
+	if err := st.DeleteUserSessions(ctx, user.ID, ""); err != nil {
+		return fmt.Errorf("invalidate sessions: %w", err)
+	}
+
+	fmt.Printf("\n  GoPanel administrator password reset\n  username: %s\n  password: %s\n\n", user.Username, password)
+	return nil
 }

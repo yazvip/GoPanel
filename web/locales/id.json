@@ -129,6 +129,8 @@
   "login.footer": "GoPanel · panel kendali VPS ringan",
   "auth.username": "Nama pengguna",
   "auth.password": "Kata sandi",
+  "auth.password_change_required": "Kata sandi harus diubah sebelum menggunakan panel ini.",
+  "auth.forbidden": "Anda tidak memiliki izin untuk melihat halaman ini.",
   "auth.usernamePlaceholder": "Nama pengguna Anda",
   "auth.passwordPlaceholder": "Kata sandi Anda",
   "auth.signIn": "Masuk",

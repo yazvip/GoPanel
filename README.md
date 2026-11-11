@@ -36,7 +36,7 @@ Langkah yang dilakukan skrip secara otomatis:
 
 Setelah install selesai, buka `http://<IP-VPS>:7800` (misalnya `http://1.2.3.4:7800`) dan login dengan kredensial yang ditampilkan. Skrip otomatis mendeteksi IP utama VPS dan menampilkannya.
 
-> ⚠️ **Keamanan:** password default dicetak ke stdout dan log. Ganti segera setelah login pertama, atau setel `GOPANEL_ADMIN_PASSWORD` sebelum install. Untuk produksi, gunakan TLS (lihat bagian [TLS panel](#tls-panel)) dan bind panel ke `127.0.0.1:7800` di belakang reverse proxy. Jangan buka `0.0.0.0:7800` ke internet tanpa TLS.
+> ⚠️ **Keamanan:** password default hanya ditampilkan di akhir install (stdout), tidak di log. Ganti segera setelah login pertama, atau setel `GOPANEL_ADMIN_PASSWORD` sebelum install. Untuk produksi, gunakan TLS (lihat bagian [TLS panel](#tls-panel)) dan bind panel ke `127.0.0.1:7800` di belakang reverse proxy. Jangan buka `0.0.0.0:7800` ke internet tanpa TLS. Jika lupa password, reset dari server: `sudo /opt/gopanel/gopanel -config /etc/gopanel/config.json -reset-admin`.
 
 ## Fitur utama
 

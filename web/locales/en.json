@@ -129,6 +129,8 @@
   "login.footer": "GoPanel · lightweight VPS control panel",
   "auth.username": "Username",
   "auth.password": "Password",
+  "auth.password_change_required": "Your password must be changed before using this panel.",
+  "auth.forbidden": "You do not have permission to view this page.",
   "auth.usernamePlaceholder": "Your username",
   "auth.passwordPlaceholder": "Your password",
   "auth.signIn": "Sign in",

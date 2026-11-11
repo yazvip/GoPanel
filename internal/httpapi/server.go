@@ -255,6 +255,19 @@ func (s *Server) handleRoles(method, pattern string, roles []string, handler htt
 	s.mux.HandleFunc(method+" "+APIPrefix+pattern, s.rateLimit(wrapped))
 }
 
+// passwordChangeRoutes are reachable while the account is flagged with
+// must_change_password so a locked-out administrator can fix the password.
+var passwordChangeRoutes = map[string]bool{
+	"/auth/me":        true,
+	"/auth/logout":    true,
+	"/auth/password":  true,
+	"/auth/sessions":  true,
+	"/auth/2fa/setup": true,
+	"/auth/2fa/enable": true,
+	"/auth/2fa/disable": true,
+	"/auth/2fa/recovery": true,
+}
+
 func (s *Server) authorized(roles []string, handler http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		p, err := s.principalFrom(r)
@@ -267,6 +280,10 @@ func (s *Server) authorized(roles []string, handler http.HandlerFunc) http.Handl
 				s.writeError(w, err)
 				return
 			}
+		}
+		if p.User.MustChangePassword && !passwordChangeRoutes[r.URL.Path] {
+			s.writeError(w, errf(http.StatusForbidden, "auth.password_change_required", "your password must be changed before using this panel"))
+			return
 		}
 		if len(roles) > 0 && !hasRole(p.User.Role, roles) {
 			s.auditDenied(r, p, "permission denied")

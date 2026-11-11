@@ -80,7 +80,7 @@ export async function render(ctx) {
     try {
       let active = [];
       try {
-        active = (await api.get('/jobs?type=apps.install&limit=50')) || [];
+        active = (await api.get('/jobs?type=app-install&limit=50')) || [];
       } catch { active = []; }
       installing.clear();
       for (const job of active) {

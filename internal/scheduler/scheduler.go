@@ -26,6 +26,7 @@ type Options struct {
 	Logger          *slog.Logger
 	AuditRetention  time.Duration
 	JobRetention    time.Duration
+	JobLogsRetention time.Duration
 	RenewBefore     time.Duration
 	SSLHour         int
 	SchedulePoll    time.Duration
@@ -50,6 +51,9 @@ func New(opts Options) (*Service, error) {
 	}
 	if opts.JobRetention <= 0 {
 		opts.JobRetention = 30 * 24 * time.Hour
+	}
+	if opts.JobLogsRetention <= 0 {
+		opts.JobLogsRetention = 30 * 24 * time.Hour
 	}
 	if opts.RenewBefore <= 0 {
 		opts.RenewBefore = 30 * 24 * time.Hour
@@ -183,6 +187,13 @@ func (s *Service) prune() {
 		s.logger.Warn("prune jobs", "error", err)
 	} else if n > 0 {
 		s.logger.Info("pruned jobs", "count", n)
+	}
+	if s.opts.Jobs != nil {
+		if n, err := s.opts.Jobs.PruneJobLogs(ctx, now.Add(-s.opts.JobLogsRetention)); err != nil {
+			s.logger.Warn("prune job logs", "error", err)
+		} else if n > 0 {
+			s.logger.Info("pruned job logs", "count", n)
+		}
 	}
 }
 
