@@ -1,0 +1,16 @@
+[Unit]
+Description=GoPanel VPS Control Panel
+After=network.target
+
+[Service]
+Type=simple
+EnvironmentFile=-/etc/default/gopanel
+ExecStart=/opt/gopanel/gopanel -config /etc/gopanel/config.json
+Restart=on-failure
+RestartSec=5
+WorkingDirectory=/opt/gopanel
+User=root
+Group=root
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,65 @@
+# Binaries
+gopanel
+gopanel.exe
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+
+# Go workspace
+go.work
+go.work.sum
+
+# Panel runtime data (dev/prod)
+data-dev/
+data/
+panel.db
+panel.db-shm
+panel.db-wal
+*.db
+*.db-shm
+*.db-wal
+
+# Secrets and certificates
+secret.key
+*.pem
+*.crt
+*.key
+
+# Logs and temp
+*.log
+logs/
+dev.log
+dev.err.log
+csurf.txt
+csrf.txt
+
+# Backups and archives generated during testing
+*.tar.gz
+*.zip
+dl.tar.gz
+demo.zip
+jar.txt
+
+# IDE/editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local config overrides
+config.local.json
+config.prod.json
+/etc/gopanel/

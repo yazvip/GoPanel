@@ -1,0 +1,47 @@
+{
+  "listen": "127.0.0.1:7800",
+  "data_dir": "data-dev",
+  "db_path": "data-dev\\panel.db",
+  "log_level": "debug",
+  "panel_url": "",
+  "allowed_roots": [
+    {
+      "token": "var-www",
+      "label": "Web root",
+      "path": "data-dev\\roots\\var-www"
+    },
+    {
+      "token": "home",
+      "label": "Home",
+      "path": "data-dev\\roots\\home"
+    }
+  ],
+  "upload_max_bytes": 2147483648,
+  "session_idle_hours": 12,
+  "session_absolute_hours": 168,
+  "acme_email": "",
+  "acme_staging": false,
+  "acme_webroot": "data-dev\\acme",
+  "ssl_dir": "data-dev\\ssl",
+  "backup_dir": "data-dev\\backups",
+  "log_dir": "data-dev\\logs",
+  "cron_file": "data-dev\\cron.d\\gopanel",
+  "site_root_base": "data-dev\\www",
+  "nginx_sites_available": "data-dev\\nginx\\sites-available",
+  "nginx_sites_enabled": "data-dev\\nginx\\sites-enabled",
+  "nginx_conf": "data-dev\\nginx\\nginx.conf",
+  "nginx_log_dir": "data-dev\\nginx\\logs",
+  "php_conf_dir": "data-dev\\php",
+  "mysql_admin_user": "root",
+  "mysql_admin_password": "",
+  "mysql_socket": "",
+  "sshd_port": 22,
+  "terminal_enabled": true,
+  "behind_proxy": false,
+  "trusted_proxies": null,
+  "tls": {
+    "cert_file": "",
+    "key_file": ""
+  },
+  "secret_key_path": "data-dev\\secret.key"
+}
