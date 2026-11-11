@@ -3,7 +3,7 @@
 # GoPanel VPS Installer — aaPanel style: git clone + run, done.
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/<USER>/gopanel/main/scripts/install.sh | sudo bash -
+#   curl -fsSL https://raw.githubusercontent.com/yazvip/GoPanel/main/scripts/install.sh | sudo bash -
 #   GOPANEL_ADMIN_PASSWORD="xxxxxxxxxxxx" sudo bash scripts/install.sh
 #
 # Defaults:
@@ -244,8 +244,8 @@ main() {
   detect_os
   log "GoPanel VPS Installer dimulai pada $OS_NAME ($OS_VERSION)"
 
-  # Repo URL: first arg, else env, else placeholder that user must fill.
-  local repo_url="${1:-${GO_PANEL_REPO_URL:-https://github.com/<USER>/gopanel.git}}"
+  # Repo URL: first arg overrides; else GOPANEL_REPO_URL env; else default.
+  local repo_url="${1:-${GO_PANEL_REPO_URL:-https://github.com/yazvip/GoPanel.git}}"
   local install_dir="/opt/gopanel"
   local config_path="/etc/gopanel/config.json"
 

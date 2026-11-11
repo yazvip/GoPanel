@@ -14,14 +14,14 @@ Karakteristik utama:
 Di VPS Linux (Ubuntu/Debian) yang baru, install GoPanel dalam satu baris:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/<USER>/gopanel/main/scripts/install.sh | sudo bash -
+curl -fsSL https://raw.githubusercontent.com/yazvip/GoPanel/main/scripts/install.sh | sudo bash -
 ```
 
 Atau manual:
 
 ```bash
 sudo apt-get update && sudo apt-get install -y git
-sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/<USER>/gopanel/main/scripts/install.sh)"
+sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/yazvip/GoPanel/main/scripts/install.sh)"
 ```
 
 Langkah yang dilakukan skrip secara otomatis:
