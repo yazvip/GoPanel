@@ -11,6 +11,7 @@ import (
 	"gopanel/internal/model"
 	"gopanel/internal/sites"
 	"gopanel/internal/store"
+	"gopanel/internal/sys"
 	"gopanel/internal/validate"
 )
 
@@ -54,6 +55,8 @@ func mapSiteError(err error) error {
 		return errf(http.StatusConflict, "sites.domain_taken", "%v", err)
 	case errors.Is(err, store.ErrNotFound):
 		return errf(http.StatusNotFound, "not_found", "site not found")
+	case errors.Is(err, sys.ErrNginxMissing):
+		return errf(http.StatusServiceUnavailable, "sites.nginx_missing", "%v", err)
 	case errors.Is(err, sites.ErrApplyFailed), errors.Is(err, sites.ErrInvalid), errors.Is(err, sites.ErrRootOutside), errors.Is(err, sites.ErrPanelUpstream):
 		return errf(http.StatusUnprocessableEntity, "sites.invalid", "%v", err)
 	}

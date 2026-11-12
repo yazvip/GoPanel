@@ -132,7 +132,7 @@ Kecuali ditandai khusus, halaman baca tersedia untuk semua pengguna yang sudah l
 
 Tidak semuanya wajib untuk start; pasang sesuai modul yang dipakai:
 
-- **Nginx** untuk situs web dan challenge ACME.
+- **Nginx** untuk situs web dan challenge ACME. Jika biner `nginx` tidak ditemukan, formulir situs menampilkan arahan pemasangan (bukan error mentah) dan mengarahkan ke Toko Aplikasi. Panel mencari `nginx` di `PATH` lalu di lokasi umum seperti `/usr/sbin/nginx` dan `/usr/local/nginx/sbin/nginx`.
 - **MySQL atau MariaDB** beserta klien baris perintah `mysql` (atau `mariadb`) dan `mysqldump` (atau `mariadb-dump`) untuk modul basis data. Jika klien tidak ditemukan, halaman Basis Data menampilkan arahan pemasangan (bukan error mentah) dan mengarahkan ke Toko Aplikasi.
 - **PHP-FPM** di `/etc/php/<versi>/fpm` jika memakai situs PHP.
 - **UFW** untuk modul firewall.

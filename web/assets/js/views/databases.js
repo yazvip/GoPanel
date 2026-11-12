@@ -70,7 +70,7 @@ export async function render(ctx) {
     if (loadError.code === 'databases.client_missing') {
       content.replaceChildren(card({
         body: emptyState(t('databases.clientMissing'), t('databases.clientMissingHint'),
-          canWrite() ? button(t('nav.apps'), { variant: 'primary', icon: 'box', onClick: () => navigate('#/apps') }) : null, 'database'),
+          canWrite() ? button(t('nav.apps'), { variant: 'primary', icon: 'box', onClick: () => navigate('/apps') }) : null, 'database'),
       }));
       return;
     }

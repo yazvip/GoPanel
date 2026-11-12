@@ -160,6 +160,8 @@ export async function render(ctx) {
     };
     type.addEventListener('change', syncType);
 
+    const nginxBox = h('div', { class: 'alert alert-warn mt2', hidden: true });
+
     const bodyEl = h('div', {},
       field(t('sites.name'), name, t('sites.nameHint'), true),
       field(t('sites.type'), type),
@@ -172,8 +174,26 @@ export async function render(ctx) {
       formRow(
         field(t('sites.clientMaxBody'), maxBody),
         h('div', { class: 'field' }, h('div', { class: 'label' }, ' '), accessLog)),
+      nginxBox,
     );
     syncType();
+
+    const showNginxMissing = () => {
+      nginxBox.replaceChildren(
+        iconSpan('alert', 16),
+        h('div', { class: 'grow' },
+          h('div', {}, t('sites.nginxMissing')),
+          h('div', { class: 'small mt1' }, t('sites.nginxMissingHint')),
+          canWrite() ? h('div', { class: 'mt2' },
+            button(t('nav.apps'), {
+              variant: 'primary',
+              icon: 'box',
+              onClick: () => { modal.close(); navigate('/apps'); },
+            })) : null),
+      );
+      nginxBox.hidden = false;
+      nginxBox.scrollIntoView({ block: 'nearest' });
+    };
 
     const modal = openModal({
       title: editing ? t('sites.editTitle') : t('sites.createTitle'),
@@ -201,7 +221,8 @@ export async function render(ctx) {
               modal.close();
               await load();
             } catch (err) {
-              toastError(err);
+              if (err.code === 'sites.nginx_missing') showNginxMissing();
+              else toastError(err);
             }
           },
         }),

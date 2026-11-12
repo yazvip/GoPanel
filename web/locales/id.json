@@ -221,6 +221,8 @@
   "sites.create": "Tambah situs",
   "sites.createTitle": "Buat situs web",
   "sites.editTitle": "Ubah situs web",
+  "sites.nginxMissing": "Nginx belum terpasang di server ini",
+  "sites.nginxMissingHint": "GoPanel memerlukan biner nginx untuk memvalidasi konfigurasi situs. Pasang Nginx dari Toko Aplikasi (atau jalankan apt install nginx), lalu coba lagi. Jika Nginx sudah terpasang, pastikan layanan gopanel dapat menemukannya — misalnya /usr/sbin ada di PATH layanan.",
   "sites.name": "Nama situs",
   "sites.nameHint": "Huruf, angka, titik, tanda hubung, dan garis bawah.",
   "sites.type": "Jenis situs",

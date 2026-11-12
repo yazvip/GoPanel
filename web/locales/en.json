@@ -221,6 +221,8 @@
   "sites.create": "Add website",
   "sites.createTitle": "Create a website",
   "sites.editTitle": "Edit website",
+  "sites.nginxMissing": "Nginx is not installed on this server",
+  "sites.nginxMissingHint": "GoPanel needs the nginx binary to validate site configurations. Install Nginx from the App Store (or run apt install nginx), then try again. If Nginx is already installed, make sure the gopanel service can find it — for example, /usr/sbin must be in the service PATH.",
   "sites.name": "Site name",
   "sites.nameHint": "Letters, numbers, dots, dashes and underscores.",
   "sites.type": "Site type",

@@ -7,12 +7,40 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"gopanel/internal/sys"
 )
+
+// nginxFallbacks covers hosts where PATH is minimal (systemd units often run
+// with a short PATH that omits /usr/sbin) or nginx comes from a source install
+// that is not linked into a standard bin directory.
+var nginxFallbacks = []string{
+	"/usr/sbin/nginx",
+	"/usr/local/sbin/nginx",
+	"/usr/local/nginx/sbin/nginx",
+	"/opt/nginx/sbin/nginx",
+	"/usr/local/openresty/nginx/sbin/nginx",
+}
+
+// nginxBinary resolves the nginx executable used by "nginx -t". A PATH-only
+// lookup reports nginx as missing on hosts where it is installed but the panel
+// service does not inherit /usr/sbin, so well-known locations are checked too.
+func nginxBinary() (string, error) {
+	if path, err := exec.LookPath("nginx"); err == nil {
+		return path, nil
+	}
+	for _, path := range nginxFallbacks {
+		info, err := os.Stat(path)
+		if err == nil && !info.IsDir() && info.Mode()&0o111 != 0 {
+			return path, nil
+		}
+	}
+	return "", fmt.Errorf("%w: install nginx (App Store) or make it reachable from the gopanel service PATH", sys.ErrNginxMissing)
+}
 
 func (s *System) siteConf(name string) string {
 	return filepath.Join(s.cfg.NginxSitesAvailable, "gopanel-"+name+".conf")
@@ -26,7 +54,11 @@ func (s *System) NginxTest(ctx context.Context) error {
 	if s.cfg.NginxConf == "" {
 		return errors.New("nginx config path is not configured")
 	}
-	_, err := s.Run(ctx, "nginx", []string{"-t", "-c", s.cfg.NginxConf}, sys.ExecOpts{Timeout: 20 * time.Second})
+	binary, err := nginxBinary()
+	if err != nil {
+		return err
+	}
+	_, err = s.Run(ctx, binary, []string{"-t", "-c", s.cfg.NginxConf}, sys.ExecOpts{Timeout: 20 * time.Second})
 	return err
 }
 

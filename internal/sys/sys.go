@@ -14,6 +14,11 @@ import (
 // should surface it as a configuration problem, not as a server failure.
 var ErrDatabaseClientMissing = errors.New("no MySQL/MariaDB client installed")
 
+// ErrNginxMissing is returned when the host has no usable nginx binary, so the
+// panel cannot validate or reload site configurations. Callers should surface
+// it as a configuration problem, not as a server failure.
+var ErrNginxMissing = errors.New("nginx is not installed")
+
 type ExecOpts struct {
 	Stdin       []byte
 	StdinReader io.Reader

@@ -574,7 +574,7 @@ func (s *Service) Delete(ctx context.Context, site *model.Site, deleteFiles bool
 		return err
 	}
 	if err := s.sys.NginxTest(ctx); err != nil {
-		return fmt.Errorf("%w: %v", ErrApplyFailed, err)
+		return fmt.Errorf("%w: %w", ErrApplyFailed, err)
 	}
 	if err := s.sys.NginxReload(ctx); err != nil {
 		return fmt.Errorf("reload nginx: %w", err)
@@ -639,12 +639,12 @@ func (s *Service) Apply(ctx context.Context, site *model.Site, prevEnabled bool)
 	if err := s.sys.NginxTest(ctx); err != nil {
 		s.restore(ctx, site.Name, oldContent, oldExists, prevEnabled)
 		_ = s.sys.NginxReload(ctx)
-		return fmt.Errorf("%w: %v", ErrApplyFailed, err)
+		return fmt.Errorf("%w: %w", ErrApplyFailed, err)
 	}
 	if err := s.sys.NginxReload(ctx); err != nil {
 		s.restore(ctx, site.Name, oldContent, oldExists, prevEnabled)
 		if rerr := s.sys.NginxReload(ctx); rerr != nil {
-			return fmt.Errorf("reload nginx: %v (rollback reload: %v)", err, rerr)
+			return fmt.Errorf("reload nginx: %w (rollback reload: %v)", err, rerr)
 		}
 		return fmt.Errorf("reload nginx: %w", err)
 	}
