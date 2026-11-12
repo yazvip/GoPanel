@@ -350,6 +350,7 @@
   "files.editor": "Edit file",
   "files.save": "Save file",
   "files.saved": "File saved",
+  "files.editorUnavailable": "The code editor could not be loaded. Falling back to a plain text editor.",
   "files.rename": "Rename",
   "files.renameTitle": "Rename",
   "files.newName": "New name",

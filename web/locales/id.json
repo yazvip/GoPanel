@@ -350,6 +350,7 @@
   "files.editor": "Ubah berkas",
   "files.save": "Simpan berkas",
   "files.saved": "Berkas disimpan",
+  "files.editorUnavailable": "Editor kode gagal dimuat. Menggunakan editor teks biasa sebagai gantinya.",
   "files.rename": "Ganti nama",
   "files.renameTitle": "Ganti nama",
   "files.newName": "Nama baru",
