@@ -17,26 +17,44 @@ Di VPS Linux (Ubuntu/Debian) yang baru, install GoPanel dalam satu baris:
 curl -fsSL https://raw.githubusercontent.com/yazvip/GoPanel/main/scripts/install.sh | sudo bash -
 ```
 
+Untuk memilih password admin sendiri, unduh dulu lalu jalankan dengan variabel **setelah** `sudo` (sudo me-reset environment, jadi `VAR=... sudo bash ...` tidak terbaca):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/yazvip/GoPanel/main/scripts/install.sh -o /tmp/gopanel-install.sh
+sudo GOPANEL_ADMIN_PASSWORD="password-panjang-anda" bash /tmp/gopanel-install.sh
+```
+
 Atau manual:
 
 ```bash
 sudo apt-get update && sudo apt-get install -y git
-sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/yazvip/GoPanel/main/scripts/install.sh)"
+curl -fsSL https://raw.githubusercontent.com/yazvip/GoPanel/main/scripts/install.sh -o /tmp/gopanel-install.sh
+sudo bash /tmp/gopanel-install.sh
 ```
 
 Langkah yang dilakukan skrip secara otomatis:
 
 1. **Instal Go** 1.26.3 bila belum ada.
 2. **Clone** repositori ke `/opt/gopanel`.
-3. **Build** binary (`go build -o gopanel ./cmd/gopanel`).
+3. **Build** binary (`go build -trimpath -ldflags "-X main.version=..." -o gopanel ./cmd/gopanel`).
 4. **Buat** `config.json` di `/etc/gopanel/` dengan default produksi (listen `0.0.0.0:7800` agar panel bisa diakses dari luar VPS, data di `/var/lib/gopanel`).
 5. **Bootstrap** admin pertama — username `admin`, password acak 16 karakter (atau `GOPANEL_ADMIN_PASSWORD` bila di-set).
-6. **Aktifkan** service systemd `gopanel.service` (auto-start).
+6. **Tulis** unit systemd `/etc/systemd/system/gopanel.service`, lalu `daemon-reload`, `enable`, dan `restart` (auto-start).
 7. **Tampilkan** username + password di akhir.
+
+Installer bersifat idempoten: menjalankannya ulang akan memperbarui checkout dan binary, tetapi mempertahankan `config.json` dan password admin yang sudah ada (baris "sudah ada sebelumnya" yang ditampilkan).
 
 Setelah install selesai, buka `http://<IP-VPS>:7800` (misalnya `http://1.2.3.4:7800`) dan login dengan kredensial yang ditampilkan. Skrip otomatis mendeteksi IP utama VPS dan menampilkannya.
 
-> ⚠️ **Keamanan:** password default hanya ditampilkan di akhir install (stdout), tidak di log. Ganti segera setelah login pertama, atau setel `GOPANEL_ADMIN_PASSWORD` sebelum install. Untuk produksi, gunakan TLS (lihat bagian [TLS panel](#tls-panel)) dan bind panel ke `127.0.0.1:7800` di belakang reverse proxy. Jangan buka `0.0.0.0:7800` ke internet tanpa TLS. Jika lupa password, reset dari server: `sudo /opt/gopanel/gopanel -config /etc/gopanel/config.json -reset-admin`.
+> ⚠️ **Keamanan:** password default hanya ditampilkan di akhir install (stdout), tidak ditulis ke log/journal. Ganti segera setelah login pertama, atau setel `GOPANEL_ADMIN_PASSWORD` saat install. Untuk produksi, gunakan TLS (lihat bagian [TLS panel](#tls-panel)) dan bind panel ke `127.0.0.1:7800` di belakang reverse proxy. Jangan buka `0.0.0.0:7800` ke internet tanpa TLS. Jika lupa password, **hentikan service lebih dulu**, lalu reset dari server:
+>
+> ```bash
+> sudo systemctl stop gopanel
+> sudo GOPANEL_ADMIN_PASSWORD="password-baru-anda" /opt/gopanel/gopanel -config /etc/gopanel/config.json -reset-admin
+> sudo systemctl start gopanel
+> ```
+>
+> Tanpa `GOPANEL_ADMIN_PASSWORD`, perintah reset membuat password acak dan mencetaknya ke stdout. Password hasil reset wajib diganti saat login berikutnya.
 
 ## Fitur utama
 
@@ -150,7 +168,7 @@ go test ./...
 
 Repo ini belum memiliki berkas `*_test.go`, sehingga `go test ./...` melaporkan `[no test files]` untuk semua paket. `go build ./...` dan `go vet ./...` lolos pada kondisi repo saat ini.
 
-Repo tidak menyertakan `Makefile`, skrip build/deploy, unit systemd, atau Dockerfile. Semua perintah di atas dijalankan langsung dengan toolchain Go.
+Repo tidak menyertakan `Makefile` atau `Dockerfile`. Deployment VPS ditangani `scripts/install.sh` (lihat [Quick Install](#quick-install-seperti-aapanel)); semua perintah build di atas dijalankan langsung dengan toolchain Go.
 
 ## Menjalankan
 
@@ -163,7 +181,7 @@ sudo ./gopanel -config /etc/gopanel/config.json
 Perilaku start:
 
 - Jika berkas config belum ada, GoPanel membuatnya dari default produksi dengan mode `0600`.
-- Jika belum ada pengguna, panel membuat user `admin` dengan password acak 16 karakter (atau nilai `GOPANEL_ADMIN_PASSWORD` bila diisi). Password dicetak ke stdout dan log start; ganti segera setelah login pertama.
+- Jika belum ada pengguna, panel membuat user `admin` dengan password acak 16 karakter (atau nilai `GOPANEL_ADMIN_PASSWORD` bila diisi). Password hanya dicetak ke **stdout**, tidak ke log; ganti segera setelah login pertama.
 - Pada mode non-dev, admin pertama wajib mengganti password (`must_change_password`).
 - Jika `tls.cert_file` dan `tls.key_file` tersedia, server langsung memakai HTTPS (`ListenAndServeTLS`). Tanpa itu panel berjalan sebagai HTTP polos.
 
@@ -325,7 +343,11 @@ GOPANEL_TERMINAL=true
 GOPANEL_ADMIN_PASSWORD=password-awal-yang-panjang
 ```
 
-`GOPANEL_ADMIN_PASSWORD` hanya dipakai saat belum ada pengguna. Password tersebut tetap dicetak ke stdout/log pada pembuatan admin pertama.
+`GOPANEL_ADMIN_PASSWORD` hanya dipakai saat belum ada pengguna. Password tersebut dicetak ke stdout pada pembuatan admin pertama (tidak ke log). Karena `sudo` me-reset environment, berikan variabel setelah `sudo`:
+
+```bash
+sudo GOPANEL_ADMIN_PASSWORD="password-awal-yang-panjang" /opt/gopanel/gopanel -config /etc/gopanel/config.json
+```
 
 ## Frontend, embed, dan i18n
 
@@ -391,14 +413,14 @@ Jika TLS diakhiri di proxy:
 
 ### Service manager
 
-Repo menyertakan unit systemd siap pakai di `systemd/gopanel.service`. Install skrip `scripts/install.sh` otomatis meng-copy dan mengaktifkannya:
+Repo menyertakan contoh unit systemd di `systemd/gopanel.service`, tetapi `scripts/install.sh` **tidak** menyalin berkas itu: installer menulis unitnya sendiri ke `/etc/systemd/system/gopanel.service` agar path instalasi/config mengikuti variabel installer, lalu menjalankan `daemon-reload`, `enable`, dan `restart`.
 
 ```bash
-sudo systemctl enable --now gopanel.service
 sudo systemctl status gopanel
+sudo systemctl restart gopanel
 ```
 
-Jika ingin manual, salin ke `/etc/systemd/system/gopanel.service` dan jalankan `systemctl daemon-reload`. Karena panel menjalankan `systemctl`, `apt`, `ufw`, dan terminal root, proses harus berjalan sebagai root.
+Untuk pemasangan manual, salin contoh unit ke `/etc/systemd/system/gopanel.service`, sesuaikan `ExecStart` bila path berbeda, lalu jalankan `systemctl daemon-reload && systemctl enable --now gopanel`. Karena panel menjalankan `systemctl`, `apt`, `ufw`, dan terminal root, proses harus berjalan sebagai root.
 
 ### Data dan backup
 
@@ -424,12 +446,12 @@ Buka port panel (`7800` atau nilai `listen`) dan port situs (`80`/`443`). Saat U
 - **Enkripsi**: password database dan secret TOTP dienkripsi AES-GCM dengan `secret.key` 32 byte; berkas kunci dibuat dengan mode `0600`.
 - **Audit**: aksi sensitif dan penolakan izin dicatat; retensi default 90 hari.
 - **Header**: CSP `default-src 'self'`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: same-origin`, dan `Permissions-Policy` membatasi kamera/mikrofon/lokasi.
-- **Rate limit bukan pengganti TLS**: password admin pertama dicetak ke stdout dan log; batasi akses ke log dan jalankan panel hanya di jaringan tepercaya atau di belakang TLS.
+- **Rate limit bukan pengganti TLS**: password admin pertama dicetak ke stdout saat bootstrap; jalankan panel hanya di jaringan tepercaya atau di belakang TLS, dan jangan menyimpan output instalasi di tempat umum.
 
 ## Batasan saat ini
 
 - Belum ada test otomatis (`*_test.go`); `go test ./...` hanya melaporkan `no test files`.
-- Belum ada unit systemd, Makefile, atau skrip deploy di repo.
+- Belum ada `Makefile` atau `Dockerfile`; deployment VPS memakai `scripts/install.sh` (systemd).
 - `-dev` bukan simulator penuh di Linux: backend sistem tetap nyata, hanya default config dan kewajiban ganti password yang berubah.
 - Frontend tidak memiliki dev server atau hot reload; setiap perubahan `web/` memerlukan rebuild.
 

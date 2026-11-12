@@ -6,16 +6,16 @@ import (
 )
 
 type bucket struct {
-	count    int
-	resetAt  time.Time
-	blocked  time.Time
+	count   int
+	resetAt time.Time
+	blocked time.Time
 }
 
 type Limiter struct {
-	mu       sync.Mutex
-	limit    int
-	window   time.Duration
-	buckets  map[string]*bucket
+	mu        sync.Mutex
+	limit     int
+	window    time.Duration
+	buckets   map[string]*bucket
 	lastSweep time.Time
 }
 

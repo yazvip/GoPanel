@@ -87,6 +87,10 @@ func (s *Server) handleTerminalWS(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
+	if user.MustChangePassword {
+		http.Error(w, "password change required", http.StatusForbidden)
+		return
+	}
 	grant, err := s.Terminal.Consume(token, user.ID, s.clientIP(r))
 	if err != nil {
 		status := http.StatusUnauthorized
@@ -196,6 +200,10 @@ readLoop:
 		}
 	}
 	cancel()
+	// Close the PTY before waiting: the output goroutine is blocked in
+	// session.Read, which only returns once the PTY is closed. Without this
+	// the handler (and the shell/PTY) would leak on every disconnect.
+	_ = session.Close()
 	<-outputDone
 	_ = conn.Close(websocket.StatusNormalClosure, "")
 }

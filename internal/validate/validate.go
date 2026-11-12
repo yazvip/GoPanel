@@ -13,11 +13,11 @@ import (
 )
 
 var (
-	siteNameRe  = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,62}$`)
-	dbNameRe    = regexp.MustCompile(`^[A-Za-z0-9_]{1,32}$`)
-	unitRe      = regexp.MustCompile(`^[A-Za-z0-9@._-]{1,100}$`)
-	usernameRe  = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{2,31}$`)
-	labelRe     = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
+	siteNameRe = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,62}$`)
+	dbNameRe   = regexp.MustCompile(`^[A-Za-z0-9_]{1,32}$`)
+	unitRe     = regexp.MustCompile(`^[A-Za-z0-9@._-]{1,100}$`)
+	usernameRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{2,31}$`)
+	labelRe    = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
 )
 
 func SiteName(name string) error {

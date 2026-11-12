@@ -1,8 +1,6 @@
 # Binaries
 /gopanel
 /gopanel.exe
-gopanel
-gopanel.exe
 *.exe
 *.exe~
 *.dll

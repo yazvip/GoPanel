@@ -124,6 +124,10 @@ func (r *Runner) RunIO(ctx context.Context, name string, args []string, opts sys
 	} else {
 		cmd.Stderr = errBuf
 	}
+	if err := cmd.Start(); err != nil {
+		res.Stderr = errBuf.String()
+		return res, &sys.ExecError{Name: name, Args: args, Result: res, Err: err}
+	}
 	waitErr := cmd.Wait()
 	if outBuf != nil {
 		res.Stdout = outBuf.String()
@@ -246,11 +250,11 @@ func (w *lineWriter) finish() {}
 
 func buildEnv(extra []string) []string {
 	values := map[string]string{
-		"PATH":              "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-		"LANG":              "C.UTF-8",
-		"LC_ALL":            "C.UTF-8",
-		"HOME":              "/root",
-		"DEBIAN_FRONTEND":   "noninteractive",
+		"PATH":                     "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+		"LANG":                     "C.UTF-8",
+		"LC_ALL":                   "C.UTF-8",
+		"HOME":                     "/root",
+		"DEBIAN_FRONTEND":          "noninteractive",
 		"APT_LISTCHANGES_FRONTEND": "none",
 	}
 	for _, kv := range extra {

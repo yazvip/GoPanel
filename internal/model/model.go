@@ -135,16 +135,16 @@ type AuditLog struct {
 }
 
 type Job struct {
-	ID        string `json:"id"`
-	Type      string `json:"type"`
-	Status    string `json:"status"`
-	Payload   string `json:"payload,omitempty"`
-	Progress  int    `json:"progress"`
-	Message   string `json:"message,omitempty"`
-	Output    string `json:"output,omitempty"`
-	Error     string `json:"error,omitempty"`
-	CreatedBy int64  `json:"created_by"`
-	CreatedAt int64  `json:"created_at"`
-	StartedAt int64  `json:"started_at"`
-	FinishedAt int64 `json:"finished_at"`
+	ID         string `json:"id"`
+	Type       string `json:"type"`
+	Status     string `json:"status"`
+	Payload    string `json:"payload,omitempty"`
+	Progress   int    `json:"progress"`
+	Message    string `json:"message,omitempty"`
+	Output     string `json:"output,omitempty"`
+	Error      string `json:"error,omitempty"`
+	CreatedBy  int64  `json:"created_by"`
+	CreatedAt  int64  `json:"created_at"`
+	StartedAt  int64  `json:"started_at"`
+	FinishedAt int64  `json:"finished_at"`
 }

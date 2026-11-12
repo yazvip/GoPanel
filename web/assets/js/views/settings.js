@@ -1,5 +1,5 @@
 import { api } from '../api.js';
-import { t, setLocale } from '../i18n.js';
+import { t, setLocale, loadLocale } from '../i18n.js';
 import {
   h, pageHeader, card, badge, button, openModal, field, input, select,
   switchControl, formRow, loadingBlock, toast, toastError, iconSpan, formatDate,
@@ -55,7 +55,8 @@ export async function render(ctx) {
         setPanelName(panelName.value.trim() || 'GoPanel');
         applyTheme(theme.value);
         if (locale.value !== document.documentElement.lang) {
-          await setLocale(locale.value);
+          setLocale(locale.value);
+          await loadLocale(locale.value);
           navigate('/settings');
           return;
         }

@@ -106,7 +106,10 @@ func run() error {
 		return fmt.Errorf("bootstrap admin: %w", err)
 	}
 	if created {
-		logger.Warn("created the first administrator", "username", adminUser, "password", adminPassword, "must_change_password", !cfg.Dev)
+		// The password is deliberately not logged: it is printed to stdout
+		// only, so it can be captured by the installer without ending up in
+		// the journal.
+		logger.Warn("created the first administrator", "username", adminUser, "must_change_password", !cfg.Dev)
 		fmt.Printf("\n  GoPanel first administrator\n  username: %s\n  password: %s\n\n", adminUser, adminPassword)
 	}
 

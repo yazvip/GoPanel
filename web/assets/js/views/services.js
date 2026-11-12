@@ -29,16 +29,14 @@ export async function render(ctx) {
     content,
   );
 
-  // Search input lives outside the card so typing does not recreate it (which
-  // would steal focus on every keystroke).
+  // The process card (and its search input) is created once; repaints only
+  // replace the table body so typing never loses focus.
   const searchInput = h('input', {
     class: 'input search-input', type: 'search', placeholder: t('services.searchProcess'),
-  });
-  page.append(searchInput);
-    value: filter,
     onInput: (ev) => { filter = ev.target.value; paintProcesses(); },
   });
-  searchInput.addEventListener('focus', () => { /* keep focus stable */ });
+  const procBody = h('div', {});
+  const procCard = card({ flush: true, actions: searchInput, body: procBody });
 
   function switchTab(next) {
     tab = next;
@@ -107,23 +105,20 @@ export async function render(ctx) {
         || String(proc.user || '').toLowerCase().includes(q);
     });
     searchInput.value = filter;
-    content.replaceChildren(card({
-      flush: true,
-      actions: searchInput,
-      body: list.length ? dataTable([
-        { label: t('services.pid'), className: 'w-80', render: (p) => h('span', { class: 'mono' }, p.pid) },
-        { label: t('services.name'), render: (p) => h('div', {},
-          h('b', {}, p.name),
-          h('div', { class: 'muted small ellipsis', style: { maxWidth: '420px' } }, p.command || '')) },
-        { label: t('services.user'), render: (p) => h('span', { class: 'muted small' }, p.user || '—') },
-        { label: t('services.cpu'), className: 'w-80', render: (p) => `${(Number(p.cpu) || 0).toFixed(1)}%` },
-        { label: t('services.mem'), className: 'w-80', render: (p) => formatBytes(p.mem) },
-        { label: t('common.actions'), className: 'col-actions', render: (p) => canWrite()
-          ? h('div', { class: 'row-actions' },
-            iconButton('xCircle', t('services.kill'), () => killProcess(p), 'danger'))
-          : null },
-      ], list) : emptyState(t('services.noProcesses'), '', null, 'activity'),
-    }));
+    procBody.replaceChildren(list.length ? dataTable([
+      { label: t('services.pid'), className: 'w-80', render: (p) => h('span', { class: 'mono' }, p.pid) },
+      { label: t('services.name'), render: (p) => h('div', {},
+        h('b', {}, p.name),
+        h('div', { class: 'muted small ellipsis', style: { maxWidth: '420px' } }, p.command || '')) },
+      { label: t('services.user'), render: (p) => h('span', { class: 'muted small' }, p.user || '—') },
+      { label: t('services.cpu'), className: 'w-80', render: (p) => `${(Number(p.cpu) || 0).toFixed(1)}%` },
+      { label: t('services.mem'), className: 'w-80', render: (p) => formatBytes(p.mem) },
+      { label: t('common.actions'), className: 'col-actions', render: (p) => canWrite()
+        ? h('div', { class: 'row-actions' },
+          iconButton('xCircle', t('services.kill'), () => killProcess(p), 'danger'))
+        : null },
+    ], list) : emptyState(t('services.noProcesses'), '', null, 'activity'));
+    if (content.firstChild !== procCard) content.replaceChildren(procCard);
   }
 
   function paintHost() {

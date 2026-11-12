@@ -54,15 +54,20 @@ export function watchJob(id, { onSnapshot, onProgress, onLog, onDone, onError } 
           return;
         }
         if (name === 'error') {
+          // A transport failure also fires an `error` event, but without data;
+          // let s.onerror handle that path so the retry logic still runs.
+          if (ev.data === undefined || ev.data === null) return;
           if (onError) onError(data);
           close();
         }
       });
     }
+    s.onopen = () => { attempts = 0; };
     s.onerror = () => {
       if (closed) return;
-      // EventSource reconnects by itself, so a transport error is usually
-      // transient. Give the server a few chances to come back before giving up.
+      // Stop the browser's own retry loop before scheduling ours, otherwise
+      // two connections would run in parallel.
+      try { s.close(); } catch { /* ignore */ }
       attempts += 1;
       if (attempts < 5) {
         setTimeout(() => {

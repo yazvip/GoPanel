@@ -121,7 +121,8 @@ func (s *Server) Handler() http.Handler {
 		}
 		s.serveStatic(w, r)
 	})
-	return s.recoverer(s.accessLog(s.securityHeaders(handler)))
+	// accessLog outermost so recoverer sees the *statusRecorder created there.
+	return s.accessLog(s.recoverer(s.securityHeaders(handler)))
 }
 
 func (s *Server) routes() {
@@ -258,14 +259,23 @@ func (s *Server) handleRoles(method, pattern string, roles []string, handler htt
 // passwordChangeRoutes are reachable while the account is flagged with
 // must_change_password so a locked-out administrator can fix the password.
 var passwordChangeRoutes = map[string]bool{
-	"/auth/me":        true,
-	"/auth/logout":    true,
-	"/auth/password":  true,
-	"/auth/sessions":  true,
-	"/auth/2fa/setup": true,
-	"/auth/2fa/enable": true,
-	"/auth/2fa/disable": true,
+	"/auth/me":           true,
+	"/auth/logout":       true,
+	"/auth/password":     true,
+	"/auth/2fa/setup":    true,
+	"/auth/2fa/enable":   true,
+	"/auth/2fa/disable":  true,
 	"/auth/2fa/recovery": true,
+}
+
+// passwordChangeAllowed reports whether path may be used before the forced
+// password change is completed. r.URL.Path carries the /api/v1 prefix.
+func passwordChangeAllowed(path string) bool {
+	path = strings.TrimPrefix(path, APIPrefix)
+	if path == "/auth/sessions" || strings.HasPrefix(path, "/auth/sessions/") {
+		return true
+	}
+	return passwordChangeRoutes[path]
 }
 
 func (s *Server) authorized(roles []string, handler http.HandlerFunc) http.HandlerFunc {
@@ -281,7 +291,7 @@ func (s *Server) authorized(roles []string, handler http.HandlerFunc) http.Handl
 				return
 			}
 		}
-		if p.User.MustChangePassword && !passwordChangeRoutes[r.URL.Path] {
+		if p.User.MustChangePassword && !passwordChangeAllowed(r.URL.Path) {
 			s.writeError(w, errf(http.StatusForbidden, "auth.password_change_required", "your password must be changed before using this panel"))
 			return
 		}

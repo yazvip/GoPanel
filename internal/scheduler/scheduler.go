@@ -18,19 +18,19 @@ import (
 )
 
 type Options struct {
-	Store           *store.Store
-	Backup          *backup.Service
-	Certs           *certs.Service
-	Jobs            *jobs.Manager
-	Audit           *audit.Recorder
-	Logger          *slog.Logger
-	AuditRetention  time.Duration
-	JobRetention    time.Duration
+	Store            *store.Store
+	Backup           *backup.Service
+	Certs            *certs.Service
+	Jobs             *jobs.Manager
+	Audit            *audit.Recorder
+	Logger           *slog.Logger
+	AuditRetention   time.Duration
+	JobRetention     time.Duration
 	JobLogsRetention time.Duration
-	RenewBefore     time.Duration
-	SSLHour         int
-	SchedulePoll    time.Duration
-	MaintenancePoll time.Duration
+	RenewBefore      time.Duration
+	SSLHour          int
+	SchedulePoll     time.Duration
+	MaintenancePoll  time.Duration
 }
 
 type Service struct {

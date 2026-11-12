@@ -1,4 +1,5 @@
 import { loadingBlock } from './ui.js';
+import { t } from './i18n.js';
 
 export function createRouter({ outlet, routes, onNavigate, onError, guard }) {
   let cleanup = null;
@@ -40,7 +41,7 @@ export function createRouter({ outlet, routes, onNavigate, onError, guard }) {
     const found = match(path);
     if (!found) {
       if (onNavigate) onNavigate(path, null);
-      outlet.replaceChildren(loadingBlock('Page not found'));
+      outlet.replaceChildren(loadingBlock(t('common.notFound')));
       return;
     }
     if (typeof guard === 'function') {
@@ -94,6 +95,10 @@ export function createRouter({ outlet, routes, onNavigate, onError, guard }) {
     currentPath: () => parse().path,
     stop() {
       window.removeEventListener('hashchange', render);
+      if (typeof cleanup === 'function') {
+        try { cleanup(); } catch { /* ignore */ }
+        cleanup = null;
+      }
     },
   };
 }

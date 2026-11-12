@@ -19,7 +19,7 @@ func scanUser(row scanner) (*model.User, error) {
 	err := row.Scan(&u.ID, &u.Username, &u.PasswordHash, &u.Role, &u.Locale, &u.TOTPSecretEnc,
 		&totpEnabled, &u.TOTPLastStep, &disabled, &mustChange, &u.CreatedAt, &u.UpdatedAt, &u.LastLoginAt)
 	if err != nil {
-		return nil, err
+		return nil, NormalizeErr(err)
 	}
 	u.TOTPEnabled = totpEnabled != 0
 	u.Disabled = disabled != 0

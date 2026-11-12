@@ -167,7 +167,10 @@ async function enterApp(me) {
   }
 }
 
+let themeMediaBound = false;
+
 function renderShell() {
+  if (router) { router.stop(); router = null; }
   const app = document.getElementById('app');
   app.replaceChildren();
 
@@ -185,6 +188,9 @@ function renderShell() {
     outlet,
     routes: ROUTES,
     guard: (route, path) => {
+      if (state.user && state.user.must_change_password && path !== '/profile') {
+        return '/profile';
+      }
       if (route.admin && !isAdmin()) return { message: t('auth.forbidden') || 'Access denied' };
       if (route.capability && !state.capabilities[route.capability]) {
         return { message: t('auth.forbidden') || 'Access denied' };
@@ -207,10 +213,13 @@ function renderShell() {
   });
   router.start();
 
-  const mq = window.matchMedia('(prefers-color-scheme: dark)');
-  mq.addEventListener('change', () => {
-    if (state.theme === 'system') applyTheme('system', false);
-  });
+  if (!themeMediaBound && window.matchMedia) {
+    themeMediaBound = true;
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    mq.addEventListener('change', () => {
+      if (state.theme === 'system') applyTheme('system', false);
+    });
+  }
 }
 
 function buildSidebar() {
@@ -355,6 +364,7 @@ function openAbout() {
 
 /* ---------------- login ---------------- */
 function showLogin(notice = '') {
+  if (router) { router.stop(); router = null; }
   if (currentLogin) currentLogin.remove();
   const app = document.getElementById('app');
   app.replaceChildren();

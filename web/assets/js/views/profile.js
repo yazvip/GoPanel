@@ -126,6 +126,8 @@ export async function render(ctx) {
         next.value = '';
         confirm.value = '';
         if (strength) strength.textContent = '';
+        const accountState = getState();
+        if (accountState.user) accountState.user.must_change_password = false;
         toast(t('profile.passwordChanged'), 'success');
         await load();
       } catch (err) {

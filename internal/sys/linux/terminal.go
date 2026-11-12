@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/creack/pty"
 
@@ -57,6 +58,21 @@ func (p *ptySession) Close() error {
 			_ = p.cmd.Process.Signal(syscall.SIGHUP)
 		}
 		err = p.file.Close()
+		// Reap the child; otherwise every closed terminal leaves a zombie for
+		// the lifetime of the panel. Kill it if it ignores SIGHUP.
+		done := make(chan struct{})
+		go func() {
+			_ = p.cmd.Wait()
+			close(done)
+		}()
+		select {
+		case <-done:
+		case <-time.After(3 * time.Second):
+			if p.cmd.Process != nil {
+				_ = p.cmd.Process.Kill()
+			}
+			<-done
+		}
 	})
 	return err
 }
