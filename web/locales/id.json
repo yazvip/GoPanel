@@ -845,5 +845,7 @@
   "users.cannotDisableSelf": "Anda tidak dapat menonaktifkan akun sendiri.",
   "users.deleteTitle": "Hapus pengguna",
   "users.mustChangePassword": "Harus mengganti kata sandi",
-  "users.resetHint": "Pengguna harus masuk kembali dengan kata sandi baru."
+  "users.resetHint": "Pengguna harus masuk kembali dengan kata sandi baru.",
+  "common.online": "Online",
+  "common.offline": "Offline"
 }

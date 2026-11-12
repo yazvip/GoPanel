@@ -845,5 +845,7 @@
   "users.cannotDisableSelf": "You cannot disable your own account.",
   "users.deleteTitle": "Delete user",
   "users.mustChangePassword": "Must change password",
-  "users.resetHint": "The user must sign in again with the new password."
+  "users.resetHint": "The user must sign in again with the new password.",
+  "common.online": "Online",
+  "common.offline": "Offline"
 }

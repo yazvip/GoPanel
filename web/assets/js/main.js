@@ -91,6 +91,8 @@ export function applyTheme(pref, persist = true) {
   const resolved = resolveTheme(pref);
   state.theme = pref;
   document.documentElement.dataset.theme = resolved;
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute('content', resolved === 'dark' ? '#0a1314' : '#f2f4f2');
   if (persist) {
     try { localStorage.setItem('gopanel.theme', pref); } catch { /* ignore */ }
   }
@@ -212,6 +214,7 @@ function renderShell() {
     },
   });
   router.start();
+  startHealthWatch();
 
   if (!themeMediaBound && window.matchMedia) {
     themeMediaBound = true;
@@ -241,9 +244,13 @@ function buildSidebar() {
     }
     nav.append(g);
   }
+  const online = Boolean(state.health);
   const foot = h('div', { class: 'sidebar-foot' },
-    h('div', {}, h('b', {}, state.panelName), ` v${state.version}`),
-    h('div', { style: { marginTop: '2px' } }, state.user ? `${state.user.username} · ${state.user.role}` : ''));
+    h('div', { class: 'side-status' },
+      h('span', { class: `pulse-dot${online ? '' : ' off'}` }),
+      h('span', { class: 'side-status-label' }, online ? t('common.online') : t('common.offline')),
+      h('span', { class: 'side-version' }, versionLabel(state.version))),
+    h('div', { class: 'side-user' }, state.user ? `${state.user.username} · ${state.user.role}` : ''));
   return h('aside', { class: 'sidebar', id: 'sidebar' },
     h('div', { class: 'sidebar-head' },
       h('div', { class: 'brand' },
@@ -301,8 +308,47 @@ function updateBreadcrumb(route) {
 
 function markActive(path) {
   document.querySelectorAll('.nav-item').forEach((el) => {
-    el.classList.toggle('active', el.dataset.path === path);
+    const active = el.dataset.path === path;
+    el.classList.toggle('active', active);
+    if (active) el.setAttribute('aria-current', 'page');
+    else el.removeAttribute('aria-current');
   });
+}
+
+let healthTimer = null;
+
+function startHealthWatch() {
+  if (healthTimer) clearInterval(healthTimer);
+  healthTimer = setInterval(async () => {
+    if (!document.querySelector('.side-status')) {
+      clearInterval(healthTimer);
+      healthTimer = null;
+      return;
+    }
+    let health = null;
+    try { health = await api.get('/healthz'); } catch { /* treat as offline */ }
+    state.health = health;
+    if (health && health.version) state.version = health.version;
+    updateSidebarStatus();
+  }, 45000);
+}
+
+function versionLabel(version) {
+  const v = String(version || '').trim();
+  if (!v) return '';
+  return /^\d/.test(v) ? `v${v}` : v;
+}
+
+function updateSidebarStatus() {
+  const node = document.querySelector('.side-status');
+  if (!node) return;
+  const online = Boolean(state.health);
+  const dot = node.querySelector('.pulse-dot');
+  if (dot) dot.classList.toggle('off', !online);
+  const label = node.querySelector('.side-status-label');
+  if (label) label.textContent = online ? t('common.online') : t('common.offline');
+  const ver = node.querySelector('.side-version');
+  if (ver) ver.textContent = versionLabel(state.version);
 }
 
 function closeSidebar() {
@@ -391,11 +437,12 @@ function buildLogin(notice) {
     const user = input({ name: 'username', autocomplete: 'username', placeholder: t('auth.usernamePlaceholder'), autofocus: true, required: true });
     const pass = input({ name: 'password', type: 'password', autocomplete: 'current-password', placeholder: t('auth.passwordPlaceholder'), required: true });
     const submit = h('button', { class: 'btn btn-primary btn-block', type: 'submit' }, t('auth.signIn'));
-    form.append(
-      field(t('auth.username'), user),
-      field(t('auth.password'), pass),
-      notice ? h('div', { class: 'alert alert-info mb2' }, iconSpan('info', 15), h('div', {}, notice)) : null,
-      submit);
+    const fields = [field(t('auth.username'), user), field(t('auth.password'), pass)];
+    if (notice) {
+      fields.push(h('div', { class: 'alert alert-info mb2' }, iconSpan('info', 15), h('div', {}, notice)));
+    }
+    fields.push(submit);
+    form.append(...fields);
     form.onsubmit = async (ev) => {
       ev.preventDefault();
       if (busy) return;
