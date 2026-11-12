@@ -305,6 +305,8 @@
   "databases.backupStarted": "Pencadangan basis data masuk antrean",
   "databases.noDatabases": "Belum ada basis data",
   "databases.noDatabasesHint": "Buat basis data untuk aplikasi Anda.",
+  "databases.clientMissing": "Klien MySQL/MariaDB belum terpasang",
+  "databases.clientMissingHint": "GoPanel memerlukan klien baris perintah mysql atau mariadb untuk mengelola basis data. Pasang MariaDB atau MySQL dari Toko Aplikasi (atau jalankan apt install mariadb-client), lalu muat ulang halaman ini.",
   "databases.noUsers": "Belum ada pengguna basis data",
   "databases.noUsersHint": "Buat pengguna untuk menghubungkan aplikasi Anda.",
   "databases.deleteConfirm": "Hapus basis data {name}? Seluruh data di dalamnya akan hilang permanen.",

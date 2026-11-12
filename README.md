@@ -124,7 +124,7 @@ Kecuali ditandai khusus, halaman baca tersedia untuk semua pengguna yang sudah l
 
 ### Sistem operasi dan hak akses
 
-- Linux dengan systemd. Implementasi Linux memanggil `systemctl`, `nginx`, `mysql`, `mysqldump`, `ufw`, `apt-get`, `dpkg-query`, dan `/bin/bash`.
+- Linux dengan systemd. Implementasi Linux memanggil `systemctl`, `nginx`, `mysql` (atau `mariadb`), `mysqldump` (atau `mariadb-dump`), `ufw`, `apt-get`, `dpkg-query`, dan `/bin/bash`.
 - Jalankan panel sebagai **root** atau dengan izin setara. Tanpa itu, operasi ke `/etc/nginx`, `/etc/cron.d`, `systemctl`, `ufw`, `apt-get`, dan terminal akan gagal.
 - Build non-Linux tetap dapat dijalankan, tetapi seluruh operasi sistem memakai `sysfake` dan tidak mengubah host.
 
@@ -133,7 +133,7 @@ Kecuali ditandai khusus, halaman baca tersedia untuk semua pengguna yang sudah l
 Tidak semuanya wajib untuk start; pasang sesuai modul yang dipakai:
 
 - **Nginx** untuk situs web dan challenge ACME.
-- **MySQL atau MariaDB** beserta klien `mysql` dan `mysqldump` untuk modul basis data.
+- **MySQL atau MariaDB** beserta klien baris perintah `mysql` (atau `mariadb`) dan `mysqldump` (atau `mariadb-dump`) untuk modul basis data. Jika klien tidak ditemukan, halaman Basis Data menampilkan arahan pemasangan (bukan error mentah) dan mengarahkan ke Toko Aplikasi.
 - **PHP-FPM** di `/etc/php/<versi>/fpm` jika memakai situs PHP.
 - **UFW** untuk modul firewall.
 - **systemd** untuk modul layanan dan reload Nginx.

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -18,6 +19,51 @@ import (
 )
 
 var identifierRe = regexp.MustCompile(`^[A-Za-z0-9_]{1,64}$`)
+
+// mysqlToolFallbacks covers hosts where PATH is minimal (systemd) or the
+// client comes from a tarball install that is not linked into /usr/bin.
+var mysqlToolFallbacks = map[string][]string{
+	"mysql":        {"/usr/bin/mysql", "/usr/local/bin/mysql", "/usr/local/mysql/bin/mysql", "/opt/mysql/bin/mysql"},
+	"mariadb":      {"/usr/bin/mariadb", "/usr/local/bin/mariadb"},
+	"mysqldump":    {"/usr/bin/mysqldump", "/usr/local/bin/mysqldump", "/usr/local/mysql/bin/mysqldump", "/opt/mysql/bin/mysqldump"},
+	"mariadb-dump": {"/usr/bin/mariadb-dump", "/usr/local/bin/mariadb-dump"},
+}
+
+// findMySQLTool returns the first usable binary among names, checking PATH
+// first and then the well-known install locations.
+func findMySQLTool(names ...string) string {
+	for _, name := range names {
+		if path, err := exec.LookPath(name); err == nil {
+			return path
+		}
+		for _, path := range mysqlToolFallbacks[name] {
+			info, err := os.Stat(path)
+			if err == nil && !info.IsDir() && info.Mode()&0o111 != 0 {
+				return path
+			}
+		}
+	}
+	return ""
+}
+
+// mysqlClient resolves the CLI used for SQL statements and restores. MariaDB
+// installs expose the same interface as "mariadb", and some minimal images
+// ship only that name, so both are accepted.
+func mysqlClient() (string, error) {
+	if path := findMySQLTool("mysql", "mariadb"); path != "" {
+		return path, nil
+	}
+	return "", fmt.Errorf("%w: install the mysql-client or mariadb-client package", sys.ErrDatabaseClientMissing)
+}
+
+// mysqlDumpTool resolves the dump CLI, which MariaDB also ships as
+// "mariadb-dump".
+func mysqlDumpTool() (string, error) {
+	if path := findMySQLTool("mysqldump", "mariadb-dump"); path != "" {
+		return path, nil
+	}
+	return "", fmt.Errorf("%w: install the mysql-client or mariadb-client package", sys.ErrDatabaseClientMissing)
+}
 
 func (s *System) mysqlDefaults() (string, func(), error) {
 	dir, err := os.MkdirTemp("", "gopanel-mysql-*")
@@ -43,12 +89,16 @@ func (s *System) mysqlDefaults() (string, func(), error) {
 }
 
 func (s *System) runMySQL(ctx context.Context, query string, timeout time.Duration) (sys.Result, error) {
+	client, err := mysqlClient()
+	if err != nil {
+		return sys.Result{}, err
+	}
 	cnf, cleanup, err := s.mysqlDefaults()
 	if err != nil {
 		return sys.Result{}, err
 	}
 	defer cleanup()
-	return s.Run(ctx, "mysql", []string{"--defaults-extra-file=" + cnf, "--batch", "--skip-column-names", "--raw"}, sys.ExecOpts{Stdin: []byte(query), Timeout: timeout, MaxOutput: 4 << 20})
+	return s.Run(ctx, client, []string{"--defaults-extra-file=" + cnf, "--batch", "--skip-column-names", "--raw"}, sys.ExecOpts{Stdin: []byte(query), Timeout: timeout, MaxOutput: 4 << 20})
 }
 
 func sqlString(v string) string {
@@ -160,13 +210,17 @@ func (s *System) MySQLDump(ctx context.Context, database string, w io.Writer) er
 	if !identifierRe.MatchString(database) {
 		return errors.New("invalid database")
 	}
+	dump, err := mysqlDumpTool()
+	if err != nil {
+		return err
+	}
 	cnf, cleanup, err := s.mysqlDefaults()
 	if err != nil {
 		return err
 	}
 	defer cleanup()
 	args := []string{"--defaults-extra-file=" + cnf, "--single-transaction", "--quick", "--routines", "--events", "--databases", database}
-	_, err = s.RunIO(ctx, "mysqldump", args, sys.ExecOpts{Timeout: 30 * time.Minute, MaxOutput: 1 << 20}, w, nil)
+	_, err = s.RunIO(ctx, dump, args, sys.ExecOpts{Timeout: 30 * time.Minute, MaxOutput: 1 << 20}, w, nil)
 	return err
 }
 
@@ -174,11 +228,15 @@ func (s *System) MySQLRestore(ctx context.Context, database string, r io.Reader)
 	if !identifierRe.MatchString(database) {
 		return errors.New("invalid database")
 	}
+	client, err := mysqlClient()
+	if err != nil {
+		return err
+	}
 	cnf, cleanup, err := s.mysqlDefaults()
 	if err != nil {
 		return err
 	}
 	defer cleanup()
-	_, err = s.Run(ctx, "mysql", []string{"--defaults-extra-file=" + cnf, "--database=" + database}, sys.ExecOpts{StdinReader: r, Timeout: 30 * time.Minute, MaxOutput: 1 << 20})
+	_, err = s.Run(ctx, client, []string{"--defaults-extra-file=" + cnf, "--database=" + database}, sys.ExecOpts{StdinReader: r, Timeout: 30 * time.Minute, MaxOutput: 1 << 20})
 	return err
 }

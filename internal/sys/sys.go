@@ -2,11 +2,17 @@ package sys
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
 	"time"
 )
+
+// ErrDatabaseClientMissing is returned when the host has no usable MySQL or
+// MariaDB command-line client, so the panel cannot manage databases. Callers
+// should surface it as a configuration problem, not as a server failure.
+var ErrDatabaseClientMissing = errors.New("no MySQL/MariaDB client installed")
 
 type ExecOpts struct {
 	Stdin       []byte

@@ -18,7 +18,7 @@ func (s *Server) handleListDatabases(w http.ResponseWriter, r *http.Request) {
 	}
 	list, err := s.Databases.List(r.Context())
 	if err != nil {
-		s.writeError(w, errf(http.StatusBadGateway, "databases.unreachable", "%v", err))
+		s.writeError(w, mapDatabaseConnectionError(err))
 		return
 	}
 	if list == nil {
@@ -53,6 +53,8 @@ func mapDatabaseError(err error) error {
 		return apiErr
 	}
 	switch {
+	case errors.Is(err, sys.ErrDatabaseClientMissing):
+		return errf(http.StatusServiceUnavailable, "databases.client_missing", "the MySQL/MariaDB client is not installed on this server")
 	case errors.Is(err, databases.ErrNotFound):
 		return errf(http.StatusNotFound, "databases.not_found", "database not found")
 	case errors.Is(err, databases.ErrNameTaken):
@@ -65,6 +67,17 @@ func mapDatabaseError(err error) error {
 		return errf(http.StatusConflict, "databases.no_credential", "this database has no panel-managed user")
 	}
 	return errf(http.StatusBadRequest, "databases.invalid", "%v", err)
+}
+
+// mapDatabaseConnectionError distinguishes "there is no client to talk to a
+// database" from "the database is installed but not reachable". The first is a
+// setup problem the operator can fix from the App Store; the second is a
+// runtime failure.
+func mapDatabaseConnectionError(err error) error {
+	if errors.Is(err, sys.ErrDatabaseClientMissing) {
+		return errf(http.StatusServiceUnavailable, "databases.client_missing", "the MySQL/MariaDB client is not installed on this server")
+	}
+	return errf(http.StatusBadGateway, "databases.unreachable", "%v", err)
 }
 
 type deleteDatabaseRequest struct {
@@ -102,7 +115,7 @@ func (s *Server) handleListDatabaseUsers(w http.ResponseWriter, r *http.Request)
 	}
 	users, err := s.Databases.Users(r.Context())
 	if err != nil {
-		s.writeError(w, errf(http.StatusBadGateway, "databases.unreachable", "%v", err))
+		s.writeError(w, mapDatabaseConnectionError(err))
 		return
 	}
 	if users == nil {

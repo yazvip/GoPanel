@@ -305,6 +305,8 @@
   "databases.backupStarted": "Database backup queued",
   "databases.noDatabases": "No databases yet",
   "databases.noDatabasesHint": "Create a database for your application.",
+  "databases.clientMissing": "No MySQL/MariaDB client on this server",
+  "databases.clientMissingHint": "GoPanel needs the mysql or mariadb command-line client to manage databases. Install MariaDB or MySQL from the App Store (or run apt install mariadb-client), then reload this page.",
   "databases.noUsers": "No database users",
   "databases.noUsersHint": "Create a user to connect your application.",
   "databases.deleteConfirm": "Delete database {name}? This permanently removes all of its data.",

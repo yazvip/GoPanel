@@ -22,11 +22,15 @@ export async function render(ctx) {
   let databases = [];
   let users = [];
   let tab = 'databases';
+  let loadError = null;
   const content = h('div', {});
 
+  const createAction = canWrite()
+    ? button(t('databases.create'), { variant: 'primary', icon: 'plus', onClick: openCreate })
+    : null;
+
   page.append(
-    pageHeader(t('databases.title'), t('databases.subtitle'),
-      canWrite() ? button(t('databases.create'), { variant: 'primary', icon: 'plus', onClick: openCreate }) : null),
+    pageHeader(t('databases.title'), t('databases.subtitle'), createAction),
     h('div', { class: 'tabs' },
       h('button', { class: 'tab active', type: 'button', dataset: { tab: 'databases' }, onClick: () => switchTab('databases') }, t('nav.databases')),
       h('button', { class: 'tab', type: 'button', dataset: { tab: 'users' }, onClick: () => switchTab('users') }, t('databases.users'))),
@@ -41,14 +45,15 @@ export async function render(ctx) {
 
   async function load() {
     content.replaceChildren(loadingBlock());
+    loadError = null;
     try {
       const [dbs, dbUsers] = await Promise.all([
         api.get('/databases').catch((err) => {
-          if (err.status === 503) return [];
+          if (err.code === 'databases.unavailable') return [];
           throw err;
         }),
         api.get('/databases/users').catch((err) => {
-          if (err.status === 503) return [];
+          if (err.code === 'databases.unavailable') return [];
           throw err;
         }),
       ]);
@@ -56,13 +61,31 @@ export async function render(ctx) {
       users = dbUsers || [];
       paint();
     } catch (err) {
-      content.replaceChildren(card({
-        body: h('div', { class: 'alert alert-danger' }, iconSpan('alert', 16), h('div', {}, err.message)),
-      }));
+      loadError = err;
+      paint();
     }
   }
 
+  function paintLoadError() {
+    if (loadError.code === 'databases.client_missing') {
+      content.replaceChildren(card({
+        body: emptyState(t('databases.clientMissing'), t('databases.clientMissingHint'),
+          canWrite() ? button(t('nav.apps'), { variant: 'primary', icon: 'box', onClick: () => navigate('#/apps') }) : null, 'database'),
+      }));
+      return;
+    }
+    content.replaceChildren(card({
+      body: h('div', { class: 'alert alert-danger' }, iconSpan('alert', 16), h('div', {}, loadError.message)),
+    }));
+  }
+
   function paint() {
+    if (loadError) {
+      if (createAction) createAction.hidden = true;
+      paintLoadError();
+      return;
+    }
+    if (createAction) createAction.hidden = false;
     if (tab === 'users') {
       paintUsers();
       return;

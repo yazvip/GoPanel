@@ -17,17 +17,19 @@ import (
 )
 
 var allowed = map[string]bool{
-	"systemctl":  true,
-	"nginx":      true,
-	"mysql":      true,
-	"mysqldump":  true,
-	"apt-get":    true,
-	"dpkg-query": true,
-	"ufw":        true,
-	"openssl":    true,
-	"crontab":    true,
-	"bash":       true,
-	"journalctl": true,
+	"systemctl":    true,
+	"nginx":        true,
+	"mysql":        true,
+	"mariadb":      true,
+	"mysqldump":    true,
+	"mariadb-dump": true,
+	"apt-get":      true,
+	"dpkg-query":   true,
+	"ufw":          true,
+	"openssl":      true,
+	"crontab":      true,
+	"bash":         true,
+	"journalctl":   true,
 }
 
 type Runner struct {
