@@ -163,7 +163,7 @@ export async function render(ctx) {
 
   page.append(
     pageHeader(t('files.title'), t('files.subtitle')),
-    card({ body: toolbar, flush: false }),
+    card({ body: toolbar, flush: true }),
     h('div', { class: 'mt3' }, tableBox),
     uploadInput,
   );

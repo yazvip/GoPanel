@@ -93,12 +93,11 @@ export async function render(ctx) {
     content.replaceChildren(card({
       flush: true,
       body: dataTable([
-        { label: t('jobs.id'), render: (job) => h('div', {},
-          h('code', { class: 'mono small' }, job.id.slice(0, 8)),
-          h('div', { class: 'muted small ellipsis', style: { maxWidth: '260px' }, title: job.id }, job.id)) },
         { label: t('jobs.type'), render: (job) => h('div', {},
           h('b', {}, typeLabel(job.type)),
-          h('div', { class: 'muted small' }, job.created_by || '—')) },
+          h('div', { class: 'muted small' },
+            `${job.created_by ? '#' + job.created_by : '—'} · `,
+            h('span', { class: 'mono', title: job.id }, job.id.slice(0, 8)))) },
         { label: t('common.status'), render: (job) => h('div', {},
           statusBadge(job.status),
           job.status === 'running'
@@ -129,7 +128,7 @@ export async function render(ctx) {
           h('dt', {}, t('jobs.id')), h('dd', { class: 'mono small' }, job.id),
           h('dt', {}, t('jobs.type')), h('dd', {}, job.type),
           h('dt', {}, t('common.status')), h('dd', {}, statusBadge(job.status)),
-          h('dt', {}, t('jobs.createdBy')), h('dd', {}, job.created_by || '—'),
+          h('dt', {}, t('jobs.createdBy')), h('dd', {}, job.created_by ? `#${job.created_by}` : '—'),
           h('dt', {}, t('common.created')), h('dd', {}, formatDate(job.created_at)),
           h('dt', {}, t('jobs.started')), h('dd', {}, job.started_at ? formatDate(job.started_at) : '—'),
           h('dt', {}, t('jobs.finished')), h('dd', {}, job.finished_at ? formatDate(job.finished_at) : '—'),

@@ -59,7 +59,7 @@ export async function render(ctx) {
     const account = card({
       title: t('profile.account'),
       icon: 'user',
-      actions: badge(user.role || 'viewer', user.role === 'admin' ? 'red' : user.role === 'operator' ? 'blue' : 'gray'),
+      actions: badge(user.role || 'viewer', user.role === 'admin' ? 'brass' : user.role === 'operator' ? 'blue' : 'gray'),
       body: h('dl', { class: 'kv' },
         h('dt', {}, t('users.username')), h('dd', { class: 'mono' }, user.username || '—'),
         h('dt', {}, t('users.role')), h('dd', {}, user.role || '—'),
@@ -103,8 +103,10 @@ export async function render(ctx) {
     });
 
     content.replaceChildren(
-      h('div', { class: 'grid cols-2' }, account, password),
-      h('div', { class: 'grid cols-2 mt3' }, tfa, sessionsCard),
+      h('div', { class: 'grid grid-main' },
+        h('div', { class: 'stack' }, account, tfa),
+        password),
+      h('div', { class: 'mt3' }, sessionsCard),
     );
   }
 

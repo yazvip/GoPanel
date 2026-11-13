@@ -135,7 +135,7 @@ export async function render(ctx) {
     } else if (installed) {
       action = h('span', { class: 'installed-pill' }, iconSpan('checkCircle', 14), t('apps.installed'));
     } else {
-      action = button(t('apps.install'), { size: 'sm', variant: 'primary', icon: 'download', onClick: () => confirmInstall(app) });
+      action = button(t('apps.install'), { size: 'sm', icon: 'download', onClick: () => confirmInstall(app) });
     }
     const cardEl = h('div', { class: `app-card cat-${app.category || 'other'} ${installed ? 'installed' : ''} ${entry ? 'busy' : ''}` },
       h('div', { class: 'app-head' },

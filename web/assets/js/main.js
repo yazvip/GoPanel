@@ -93,7 +93,7 @@ export function applyTheme(pref, persist = true) {
   state.theme = pref;
   document.documentElement.dataset.theme = resolved;
   const meta = document.querySelector('meta[name="theme-color"]');
-  if (meta) meta.setAttribute('content', resolved === 'dark' ? '#0a1314' : '#f2f4f2');
+  if (meta) meta.setAttribute('content', resolved === 'dark' ? '#0c0e0f' : '#f1f1ec');
   if (persist) {
     try { localStorage.setItem('gopanel.theme', pref); } catch { /* ignore */ }
   }

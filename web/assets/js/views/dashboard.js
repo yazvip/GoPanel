@@ -127,7 +127,10 @@ export async function render(ctx) {
             h('div', { class: 'muted small' }, relativeTime(job.created_at))) },
           { label: t('jobs.status'), render: (job) => statusBadge(job.status) },
           { label: t('jobs.progress'), className: 'w-120', render: (job) => h('div', { class: 'progress-inline' },
-            h('span', { style: { width: `${Math.max(0, Math.min(100, job.progress || 0))}%` } })) },
+            h('span', {
+              class: job.status === 'running' ? '' : job.status === 'failed' ? 'failed' : 'done',
+              style: { width: `${Math.max(0, Math.min(100, job.progress || 0))}%` },
+            })) },
         ], jobs.slice(0, 6))
         : emptyState(t('dashboard.noJobs'), ''),
     });
@@ -162,8 +165,7 @@ export async function render(ctx) {
         button(t('common.refresh'), { icon: 'refresh', onClick: () => load(false) }))),
       stats,
       h('div', { class: 'grid cols-2' }, hostCard, servicesCard),
-      h('div', { class: 'grid cols-2' }, jobsCard, backupsCard),
-      quick,
+      h('div', { class: 'grid grid-main' }, jobsCard, h('div', { class: 'stack' }, backupsCard, quick)),
     );
   }
 

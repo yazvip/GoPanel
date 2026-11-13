@@ -17,7 +17,7 @@ function roleLabel(role) {
 }
 
 function roleTone(role) {
-  return role === 'admin' ? 'red' : role === 'operator' ? 'blue' : 'gray';
+  return role === 'admin' ? 'brass' : role === 'operator' ? 'blue' : 'gray';
 }
 
 function randomPassword(length = 20) {

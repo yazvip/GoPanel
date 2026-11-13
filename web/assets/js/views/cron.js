@@ -1,7 +1,7 @@
 import { api } from '../api.js';
 import { t } from '../i18n.js';
 import {
-  h, pageHeader, card, badge, dataTable, emptyState, button, iconButton,
+  h, pageHeader, card, badge, statusBadge, dataTable, emptyState, button, iconButton,
   openModal, confirmDialog, field, input, textarea, select, checkbox, formRow,
   loadingBlock, toast, toastError, iconSpan, formatDate, relativeTime, copyText,
 } from '../ui.js';
@@ -56,7 +56,7 @@ export async function render(ctx) {
             job.enabled ? null : badge(t('status.disabled'), 'gray')),
           h('div', { class: 'muted small mono ellipsis', style: { maxWidth: '420px' } }, job.command)) },
         { label: t('cron.schedule'), render: (job) => h('code', { class: 'chip mono' }, job.schedule) },
-        { label: t('common.status'), render: (job) => job.last_status ? badge(job.last_status, job.last_status === 'success' ? 'green' : job.last_status === 'failed' ? 'red' : 'gray') : h('span', { class: 'muted small' }, t('common.never')) },
+        { label: t('common.status'), render: (job) => job.last_status ? statusBadge(job.last_status) : h('span', { class: 'muted small' }, t('common.never')) },
         { label: t('cron.lastRun'), render: (job) => h('span', { class: 'muted small', title: formatDate(job.last_run_at) }, job.last_run_at ? relativeTime(job.last_run_at) : t('common.never')) },
         { label: t('common.actions'), className: 'col-actions', render: (job) => h('div', { class: 'row-actions' },
           canWrite() ? iconButton('play', t('cron.runNow'), () => runNow(job)) : null,

@@ -77,7 +77,7 @@ export async function render(ctx) {
           h('div', { class: 'row gap-sm' },
             h('b', {}, b.ref || b.id),
             b.kind === 'database' ? badge(t('backups.database'), 'violet') : badge(t('backups.site'), 'blue')),
-          h('div', { class: 'muted small mono' }, b.id)) },
+          h('div', { class: 'muted small mono', title: b.id }, b.id.slice(0, 8))) },
         { label: t('backups.size'), render: (b) => formatBytes(b.size) },
         { label: t('backups.status'), render: (b) => h('div', {},
           statusBadge(b.status),

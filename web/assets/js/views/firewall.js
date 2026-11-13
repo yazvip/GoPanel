@@ -64,7 +64,6 @@ export async function render(ctx) {
       title: `${t('firewall.rules')} (${rules.length})`,
       icon: 'server',
       flush: true,
-      actions: canWrite() ? button(t('firewall.addRule'), { size: 'sm', icon: 'plus', onClick: openAddRule }) : null,
       body: rules.length ? dataTable([
         { label: '#', className: 'w-60', render: (rule) => h('span', { class: 'muted mono' }, rule.number) },
         { label: t('firewall.to'), render: (rule) => h('div', {},
