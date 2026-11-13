@@ -2,8 +2,8 @@ import { api } from '../api.js';
 import { t, setLocale, loadLocale } from '../i18n.js';
 import {
   h, pageHeader, card, badge, button, openModal, field, input, select,
-  switchControl, formRow, loadingBlock, toast, toastError, iconSpan, formatDate,
-  copyText,
+  switchControl, formRow, loadingBlock, toast, toastError, formatDate,
+  copyText, repoLink,
 } from '../ui.js';
 import { isAdmin, applyTheme, setPanelName } from '../main.js';
 import { navigate } from '../router.js';
@@ -13,8 +13,6 @@ const THEMES = [
   { value: 'light', labelKey: 'settings.themeLight' },
   { value: 'dark', labelKey: 'settings.themeDark' },
 ];
-
-const REPO_URL = 'https://github.com/yazvip/GoPanel';
 
 export async function render(ctx) {
   const { outlet } = ctx;
@@ -120,18 +118,7 @@ export async function render(ctx) {
         h('dt', {}, t('settings.logDir')), h('dd', { class: 'mono small' }, data.log_dir || '—'),
         h('dt', {}, t('settings.sessionIdle')), h('dd', {}, `${data.session_idle_hours ?? '—'} h`),
         h('dt', {}, t('settings.sessionAbsolute')), h('dd', {}, `${data.session_absolute_hours ?? '—'} h`)),
-      foot: h('a', {
-        class: 'repo-link',
-        href: REPO_URL,
-        target: '_blank',
-        rel: 'noopener noreferrer',
-        title: t('settings.repository'),
-      },
-        h('span', { class: 'repo-icon' }, iconSpan('github', 18)),
-        h('span', { class: 'repo-text' },
-          h('b', {}, 'GoPanel'),
-          h('span', { class: 'small' }, 'yazvip/GoPanel')),
-        iconSpan('external', 14)),
+      foot: repoLink(),
     });
 
     const tls = data.tls || {};

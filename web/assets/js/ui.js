@@ -85,6 +85,25 @@ export function statCard({ label, value, meta, icon: iconName, tone = 'green', m
     body);
 }
 
+/* The project repository, linked from the About panels. */
+export const REPO_URL = 'https://github.com/yazvip/GoPanel';
+
+export function repoLink({ label = 'GoPanel', sub = 'yazvip/GoPanel' } = {}) {
+  return h('a', {
+    class: 'repo-link',
+    href: REPO_URL,
+    target: '_blank',
+    rel: 'noopener noreferrer',
+    title: t('settings.repository'),
+    'aria-label': t('settings.repository'),
+  },
+    h('span', { class: 'repo-icon' }, iconSpan('github', 18)),
+    h('span', { class: 'repo-text' },
+      h('b', {}, label),
+      h('span', { class: 'small' }, sub)),
+    iconSpan('external', 14));
+}
+
 export function badge(text, tone = 'gray') {
   return h('span', { class: `badge badge-${tone}` }, text);
 }

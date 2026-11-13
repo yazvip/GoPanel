@@ -1,6 +1,6 @@
 import { api, setCSRF, onUnauthorized, errorMessage } from './api.js';
 import { loadLocale, savedLocale, setLocale, t, getLang, localeName } from './i18n.js';
-import { h, iconSpan, toast, toastError, openModal, field, input, button } from './ui.js';
+import { h, iconSpan, toast, toastError, openModal, field, input, button, repoLink } from './ui.js';
 import { createRouter, navigate } from './router.js';
 import { createUpdateBadge, createAboutUpdateRow } from './update.js';
 
@@ -406,15 +406,17 @@ function openAbout() {
     title: t('common.about'),
     size: 'modal-sm',
     body: [
-      h('div', { style: { display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '14px' } },
-        h('div', { class: 'brand-mark', style: { width: '42px', height: '42px', borderRadius: '11px', background: 'var(--primary)', display: 'grid', placeItems: 'center', color: '#fff', fontWeight: '800', fontSize: '22px' } }, 'G'),
-        h('div', {}, h('div', { style: { fontWeight: '700', fontSize: '16px' } }, state.panelName),
-          h('div', { class: 'muted small' }, `GoPanel ${state.version}`))),
-      h('div', { class: 'kv' },
-        h('dt', {}, t('common.version')), h('dd', {}, state.version),
+      h('div', { class: 'about-head' },
+        h('div', { class: 'about-logo' }, 'G'),
+        h('div', { class: 'about-id' },
+          h('div', { class: 'about-name' }, state.panelName),
+          h('div', { class: 'small' }, `GoPanel ${state.version}`))),
+      h('dl', { class: 'kv kv-rows' },
+        h('dt', {}, t('common.version')), h('dd', { class: 'mono' }, state.version),
         h('dt', {}, t('settings.language')), h('dd', {}, localeName(getLang())),
         h('dt', {}, t('common.role')), h('dd', {}, state.user.role),
-        h('dt', {}, t('common.uptime')), h('dd', {}, state.health ? `${Math.floor(state.health.uptime / 3600)}h` : '—')),
+        h('dt', {}, t('common.uptime')), h('dd', { class: 'mono' }, state.health ? `${Math.floor(state.health.uptime / 3600)}h` : '—')),
+      h('div', { class: 'about-repo' }, repoLink()),
       isAdmin() ? createAboutUpdateRow() : null,
     ],
     footer: h('button', { class: 'btn btn-primary', type: 'button', onClick: () => document.querySelector('.modal-close')?.click() }, t('common.close')),

@@ -1088,6 +1088,26 @@ table.table .mono { font-family: var(--mono); font-size: 11.5px; }
 .update-progress { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 10px; padding: 28px 8px; }
 .update-progress .update-spinner { width: 28px; height: 28px; border-width: 3px; }
 .update-progress-status { font-size: 13.5px; font-weight: 600; }
+.about-head {
+  display: flex; align-items: center; gap: 13px; padding-bottom: 15px; margin-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+}
+.about-logo {
+  width: 46px; height: 46px; border-radius: 12px; flex: 0 0 auto;
+  display: grid; place-items: center; line-height: 1;
+  font-family: var(--display); font-size: 23px; font-weight: 500;
+  color: var(--on-primary); background: var(--btn-primary-bg);
+  border: 1px solid var(--btn-primary-border);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .3), var(--shadow-xs);
+}
+.about-id { min-width: 0; }
+.about-name {
+  font-family: var(--display); font-size: 18px; font-weight: 500; letter-spacing: -.01em;
+  line-height: 1.2; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.about-id .small { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.about-repo { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+.about-repo .repo-link { margin: 0 -10px; }
 .about-update {
   display: flex; align-items: center; gap: 10px; margin-top: 12px; padding-top: 12px;
   border-top: 1px solid var(--border); flex-wrap: wrap;
