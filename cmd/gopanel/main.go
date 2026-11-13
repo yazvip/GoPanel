@@ -36,6 +36,7 @@ import (
 	"gopanel/internal/store"
 	"gopanel/internal/sys/factory"
 	"gopanel/internal/terminal"
+	"gopanel/internal/update"
 )
 
 var version = "dev"
@@ -145,6 +146,11 @@ func run() error {
 	databaseService := databases.New(st, system, authService, logger)
 	auditRecorder := audit.New(st, logger)
 	terminalManager := terminal.New()
+	updateService := update.New(update.Options{
+		Version:    version,
+		ConfigPath: cfg.ConfigPath,
+		Logger:     logger,
+	})
 
 	for name, register := range map[string]func(*jobs.Manager) error{
 		"backup": backupService.RegisterJobs,
@@ -205,6 +211,7 @@ func run() error {
 		ACME:      acmeService,
 		Terminal:  terminalManager,
 		Audit:     auditRecorder,
+		Update:    updateService,
 		System:    system,
 		Logger:    logger,
 		Version:   version,

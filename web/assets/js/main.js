@@ -2,6 +2,7 @@ import { api, setCSRF, onUnauthorized, errorMessage } from './api.js';
 import { loadLocale, savedLocale, setLocale, t, getLang, localeName } from './i18n.js';
 import { h, iconSpan, toast, toastError, openModal, field, input, button } from './ui.js';
 import { createRouter, navigate } from './router.js';
+import { createUpdateBadge, createAboutUpdateRow } from './update.js';
 
 const state = {
   user: null,
@@ -262,6 +263,15 @@ function buildSidebar() {
 }
 
 function buildTopbar() {
+  if (updateBadge) {
+    updateBadge.stop();
+    updateBadge = null;
+  }
+  if (isAdmin()) {
+    updateBadge = createUpdateBadge();
+    updateBadge.start();
+  }
+
   const crumbs = h('div', { class: 'crumbs', id: 'crumbs' },
     iconSpan('home', 15), h('span', { class: 'sep' }, '/'), h('b', {}, t('nav.dashboard')));
   const themeBtn = h('button', {
@@ -290,6 +300,7 @@ function buildTopbar() {
       }, iconSpan('menu', 19)),
       crumbs),
     h('div', { class: 'topbar-right' },
+      updateBadge ? updateBadge.chip : null,
       themeBtn,
       userBtn));
 }
@@ -316,6 +327,7 @@ function markActive(path) {
 }
 
 let healthTimer = null;
+let updateBadge = null;
 
 function startHealthWatch() {
   if (healthTimer) clearInterval(healthTimer);
@@ -403,6 +415,7 @@ function openAbout() {
         h('dt', {}, t('settings.language')), h('dd', {}, localeName(getLang())),
         h('dt', {}, t('common.role')), h('dd', {}, state.user.role),
         h('dt', {}, t('common.uptime')), h('dd', {}, state.health ? `${Math.floor(state.health.uptime / 3600)}h` : '—')),
+      isAdmin() ? createAboutUpdateRow() : null,
     ],
     footer: h('button', { class: 'btn btn-primary', type: 'button', onClick: () => document.querySelector('.modal-close')?.click() }, t('common.close')),
   });
@@ -411,6 +424,7 @@ function openAbout() {
 /* ---------------- login ---------------- */
 function showLogin(notice = '') {
   if (router) { router.stop(); router = null; }
+  if (updateBadge) { updateBadge.stop(); updateBadge = null; }
   if (currentLogin) currentLogin.remove();
   const app = document.getElementById('app');
   app.replaceChildren();

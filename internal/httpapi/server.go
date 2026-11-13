@@ -31,6 +31,7 @@ import (
 	"gopanel/internal/store"
 	"gopanel/internal/sys"
 	"gopanel/internal/terminal"
+	"gopanel/internal/update"
 	"gopanel/web"
 )
 
@@ -58,6 +59,7 @@ type Deps struct {
 	ACME      *acme.Service
 	Terminal  *terminal.Manager
 	Audit     *audit.Recorder
+	Update    *update.Service
 	System    sys.System
 	Logger    *slog.Logger
 	Version   string
@@ -236,6 +238,9 @@ func (s *Server) routes() {
 	s.handleRoles(http.MethodPatch, "/settings", only(RoleAdmin), s.handleUpdateSettings)
 	s.handleRoles(http.MethodPost, "/settings/tls", only(RoleAdmin), s.handleUploadTLS)
 	s.handleRoles(http.MethodGet, "/audit", only(RoleAdmin), s.handleAudit)
+
+	s.handleRoles(http.MethodGet, "/update", only(RoleAdmin), s.handleUpdateStatus)
+	s.handleRoles(http.MethodPost, "/update/apply", only(RoleAdmin), s.handleUpdateApply)
 }
 
 func (s *Server) handle(method, pattern string, handler http.HandlerFunc) {
