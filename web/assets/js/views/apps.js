@@ -113,7 +113,23 @@ export async function render(ctx) {
       grid.replaceChildren(card({ body: emptyState(t('apps.noApps'), t('apps.noAppsHint'), null, 'box') }));
       return;
     }
-    grid.replaceChildren(h('div', { class: 'apps-grid' }, list.map(appCard)));
+    if (category !== 'all') {
+      grid.replaceChildren(h('div', { class: 'apps-grid' }, list.map(appCard)));
+      return;
+    }
+    const groups = new Map();
+    for (const item of list) {
+      const key = item.category || 'other';
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(item);
+    }
+    grid.replaceChildren(...Array.from(groups.keys()).sort().map((cat) => h('section', { class: 'app-section' },
+      h('div', { class: 'app-section-head' },
+        h('span', { class: 'app-section-icon' }, iconSpan(CATEGORY_ICON[cat] || 'box', 16)),
+        h('h3', { class: 'app-section-title' }, categoryLabel(cat)),
+        h('span', { class: 'app-section-count' }, String(groups.get(cat).length)),
+        h('span', { class: 'app-section-rule' })),
+      h('div', { class: 'apps-grid' }, groups.get(cat).map(appCard)))));
   }
 
   function appName(id) {

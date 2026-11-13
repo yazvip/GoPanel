@@ -727,6 +727,7 @@
   "settings.uploadKey": "Choose key file",
   "settings.selectFiles": "Select both files first",
   "settings.about": "About",
+  "settings.repository": "GoPanel GitHub repository",
   "settings.saveFailed": "Could not save settings",
   "settings.uploadFailed": "Could not upload the certificate",
   "settings.panelNamePlaceholder": "GoPanel",

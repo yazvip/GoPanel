@@ -727,6 +727,7 @@
   "settings.uploadKey": "Pilih berkas kunci",
   "settings.selectFiles": "Pilih kedua berkas terlebih dahulu",
   "settings.about": "Tentang",
+  "settings.repository": "Repositori GitHub GoPanel",
   "settings.saveFailed": "Gagal menyimpan pengaturan",
   "settings.uploadFailed": "Gagal mengunggah sertifikat",
   "settings.panelNamePlaceholder": "GoPanel",

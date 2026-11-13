@@ -62,35 +62,38 @@ export async function render(ctx) {
   }
 
   function paint() {
-    const rows = sites.map((site) => h('div', { class: 'site-row' },
-      h('div', { class: 'site-main' },
-        h('div', { class: 'site-title' },
+    const rows = sites.map((site) => h('article', { class: `site-card${site.enabled ? '' : ' is-off'}` },
+      h('div', { class: 'site-card-head' },
+        h('span', { class: `site-dot ${site.enabled ? 'on' : 'off'}` }),
+        h('b', { class: 'site-name', title: site.name }, site.name),
+        badge(typeLabel(site.type), site.type === 'proxy' ? 'violet' : site.type === 'php' ? 'blue' : 'gray'),
+        site.ssl_enabled ? badge('SSL', 'green') : null),
+      h('div', { class: 'site-domains' },
+        (site.domains || []).map((domain) => h('span', { class: 'chip' },
+          domain.is_primary ? iconSpan('globe', 12) : null, domain.domain)),
+        !(site.domains || []).length ? h('span', { class: 'muted small' }, t('sites.noDomains')) : null),
+      h('div', { class: 'site-meta' },
+        h('span', { class: 'mono' }, site.root_path || '—'),
+        h('span', { class: 'muted' }, '·'),
+        h('span', {}, site.ssl_enabled && site.ssl_expires_at
+          ? `${t('sites.sslExpires')} ${formatDate(site.ssl_expires_at, false)}`
+          : t('sites.sslOff'))),
+      h('div', { class: 'site-card-foot' },
+        h('span', { class: 'site-state' },
           h('span', { class: `site-dot ${site.enabled ? 'on' : 'off'}` }),
-          h('b', {}, site.name),
-          badge(typeLabel(site.type), site.type === 'proxy' ? 'violet' : site.type === 'php' ? 'blue' : 'gray'),
-          site.ssl_enabled ? badge('SSL', 'green') : null),
-        h('div', { class: 'site-domains' },
-          (site.domains || []).map((domain) => h('span', { class: 'chip' },
-            domain.is_primary ? iconSpan('globe', 12) : null, domain.domain)),
-          !(site.domains || []).length ? h('span', { class: 'muted small' }, t('sites.noDomains')) : null),
-        h('div', { class: 'site-meta' },
-          h('span', { class: 'mono' }, site.root_path || '—'),
-          h('span', { class: 'muted' }, '·'),
-          h('span', {}, site.ssl_enabled && site.ssl_expires_at
-            ? `${t('sites.sslExpires')} ${formatDate(site.ssl_expires_at, false)}`
-            : t('sites.sslOff')))),
-      h('div', { class: 'site-actions' },
-        h('button', {
-          class: 'icon-btn', type: 'button', title: t('sites.overview'), 'aria-label': t('sites.overview'),
-          onClick: () => openManage(site),
-        }, iconSpan('settings', 17)),
-        canWrite() ? h('button', {
-          class: 'icon-btn', type: 'button',
-          title: site.enabled ? t('sites.disable') : t('sites.enable'),
-          'aria-label': site.enabled ? t('sites.disable') : t('sites.enable'),
-          onClick: () => toggleSite(site),
-        }, iconSpan(site.enabled ? 'pause' : 'play', 16)) : null,
-        canWrite() ? iconButton('trash', t('sites.delete'), () => deleteSite(site), 'danger') : null)));
+          site.enabled ? t('status.enabled') : t('status.disabled')),
+        h('div', { class: 'site-actions' },
+          h('button', {
+            class: 'icon-btn', type: 'button', title: t('sites.overview'), 'aria-label': t('sites.overview'),
+            onClick: () => openManage(site),
+          }, iconSpan('settings', 17)),
+          canWrite() ? h('button', {
+            class: 'icon-btn', type: 'button',
+            title: site.enabled ? t('sites.disable') : t('sites.enable'),
+            'aria-label': site.enabled ? t('sites.disable') : t('sites.enable'),
+            onClick: () => toggleSite(site),
+          }, iconSpan(site.enabled ? 'pause' : 'play', 16)) : null,
+          canWrite() ? iconButton('trash', t('sites.delete'), () => deleteSite(site), 'danger') : null))));
 
     if (!sites.length) {
       body.replaceChildren(card({
@@ -100,7 +103,7 @@ export async function render(ctx) {
       }));
       return;
     }
-    body.replaceChildren(h('div', { class: 'site-list' }, rows));
+    body.replaceChildren(h('div', { class: 'site-grid' }, rows));
   }
 
   async function toggleSite(site) {

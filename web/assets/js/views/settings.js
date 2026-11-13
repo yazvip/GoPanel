@@ -14,6 +14,8 @@ const THEMES = [
   { value: 'dark', labelKey: 'settings.themeDark' },
 ];
 
+const REPO_URL = 'https://github.com/yazvip/GoPanel';
+
 export async function render(ctx) {
   const { outlet } = ctx;
   const page = h('div', { class: 'page' });
@@ -107,7 +109,8 @@ export async function render(ctx) {
     const info = card({
       title: t('settings.about'),
       icon: 'info',
-      body: h('dl', { class: 'kv' },
+      class: 'card-about',
+      body: h('dl', { class: 'kv kv-rows' },
         h('dt', {}, t('settings.version')), h('dd', {}, h('span', { class: 'mono' }, data.version || '—')),
         h('dt', {}, t('settings.started')), h('dd', {}, formatDate(Math.floor(new Date(data.started).getTime() / 1000))),
         h('dt', {}, t('settings.panelUrl')), h('dd', { class: 'mono small' }, data.panel_url || '—'),
@@ -117,6 +120,18 @@ export async function render(ctx) {
         h('dt', {}, t('settings.logDir')), h('dd', { class: 'mono small' }, data.log_dir || '—'),
         h('dt', {}, t('settings.sessionIdle')), h('dd', {}, `${data.session_idle_hours ?? '—'} h`),
         h('dt', {}, t('settings.sessionAbsolute')), h('dd', {}, `${data.session_absolute_hours ?? '—'} h`)),
+      foot: h('a', {
+        class: 'repo-link',
+        href: REPO_URL,
+        target: '_blank',
+        rel: 'noopener noreferrer',
+        title: t('settings.repository'),
+      },
+        h('span', { class: 'repo-icon' }, iconSpan('github', 18)),
+        h('span', { class: 'repo-text' },
+          h('b', {}, 'GoPanel'),
+          h('span', { class: 'small' }, 'yazvip/GoPanel')),
+        iconSpan('external', 14)),
     });
 
     const tls = data.tls || {};
@@ -153,8 +168,9 @@ export async function render(ctx) {
     });
 
     content.replaceChildren(
-      h('div', { class: 'grid cols-2' }, generalCard, info),
-      h('div', { class: 'grid cols-2 mt3' }, acmeCard, tlsCard),
+      h('div', { class: 'settings-layout' },
+        h('div', { class: 'stack' }, generalCard, acmeCard, tlsCard),
+        h('aside', { class: 'settings-aside' }, info)),
     );
   }
 
