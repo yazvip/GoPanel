@@ -706,6 +706,46 @@ func blockedByFile(root *os.Root, dir string) bool {
 	return false
 }
 
+// CopyAs copies src to an explicit destination path, replacing whatever is
+// already there. It is used to duplicate an item under a new name.
+func (s *Service) CopyAs(token, from, to string) error {
+	root, src, err := s.open(token, from)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	dst, err := cleanRel(to)
+	if err != nil {
+		return err
+	}
+	if dst == "." {
+		return ErrInvalidName
+	}
+	srcInfo, err := root.Lstat(src)
+	if err != nil {
+		return mapError(err)
+	}
+	if srcInfo.Mode()&os.ModeSymlink != 0 {
+		return ErrSymlink
+	}
+	if _, err := root.Lstat(dst); err == nil {
+		if err := root.RemoveAll(dst); err != nil {
+			return mapError(err)
+		}
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+	if parent := path.Dir(dst); parent != "." {
+		if err := root.MkdirAll(parent, 0o755); err != nil {
+			return mapError(err)
+		}
+	}
+	if srcInfo.IsDir() {
+		return copyTree(root, src, dst, 0)
+	}
+	return copyFile(root, src, dst, srcInfo.Mode().Perm())
+}
+
 func copyTree(root *os.Root, src, dst string, depth int) error {
 	if depth > 64 {
 		return ErrDepth

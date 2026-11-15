@@ -20,6 +20,18 @@ func (s *Server) handleFileRoots(w http.ResponseWriter, r *http.Request) {
 	s.ok(w, roots)
 }
 
+// handleFileConnector serves the elFinder connector protocol. Viewers may
+// browse, everybody else may change files.
+func (s *Server) handleFileConnector(w http.ResponseWriter, r *http.Request) {
+	if s.finder == nil {
+		s.writeError(w, errf(http.StatusNotFound, "files.no_connector", "the file manager is not available"))
+		return
+	}
+	p := s.principal(r)
+	allowWrite := p != nil && p.User.Role != RoleViewer
+	s.finder.Handle(w, r, allowWrite)
+}
+
 func (s *Server) fileParams(r *http.Request) (root, rel string) {
 	return r.URL.Query().Get("root"), r.URL.Query().Get("path")
 }

@@ -23,6 +23,7 @@ import (
 	"gopanel/internal/config"
 	"gopanel/internal/cronjobs"
 	"gopanel/internal/databases"
+	"gopanel/internal/elfinder"
 	"gopanel/internal/files"
 	"gopanel/internal/jobs"
 	"gopanel/internal/metrics"
@@ -73,6 +74,7 @@ type Server struct {
 	trusted  []netip.Prefix
 	limit    *ipLimiter
 	handlers []routeDescription
+	finder   *elfinder.Connector
 }
 
 type routeDescription struct {
@@ -101,6 +103,9 @@ func New(deps Deps) (*Server, error) {
 		deps.Started = time.Now()
 	}
 	s := &Server{Deps: deps, logger: deps.Logger, mux: http.NewServeMux(), limit: newIPLimiter(1200, time.Minute)}
+	if deps.Files != nil {
+		s.finder = elfinder.New(deps.Files, deps.Files.Roots(), deps.Logger)
+	}
 	if deps.Config != nil {
 		for _, raw := range deps.Config.TrustedProxies {
 			prefix, err := netip.ParsePrefix(strings.TrimSpace(raw))
@@ -157,6 +162,8 @@ func (s *Server) routes() {
 	s.handle(http.MethodGet, "/host", s.handleHost)
 
 	s.handle(http.MethodGet, "/files/roots", s.handleFileRoots)
+	s.handle(http.MethodGet, "/files/connector", s.handleFileConnector)
+	s.handle(http.MethodPost, "/files/connector", s.handleFileConnector)
 	s.handle(http.MethodGet, "/files", s.handleFileList)
 	s.handle(http.MethodGet, "/files/stat", s.handleFileStat)
 	s.handle(http.MethodGet, "/files/download", s.handleFileDownload)
