@@ -145,6 +145,22 @@ func cleanName(name string) (string, error) {
 	return name, nil
 }
 
+// cleanUploadName validates a slash-separated path built by the browser's
+// folder picker. Every segment must be a plain name, so ".." and absolute
+// paths are rejected instead of being resolved.
+func cleanUploadName(name string) (string, error) {
+	name = strings.ReplaceAll(name, "\\", "/")
+	if name == "" || strings.ContainsRune(name, 0) {
+		return "", ErrInvalidName
+	}
+	for _, segment := range strings.Split(name, "/") {
+		if _, err := cleanName(segment); err != nil {
+			return "", err
+		}
+	}
+	return name, nil
+}
+
 func mapError(err error) error {
 	if err == nil {
 		return nil
@@ -384,8 +400,11 @@ func writeAtomic(root *os.Root, name string, data []byte, mode os.FileMode) erro
 	return nil
 }
 
+// Upload writes r to dir/name. name may contain a slash-separated relative
+// path, which is how the browser reports the contents of an uploaded folder;
+// missing parent directories are created.
 func (s *Service) Upload(token, dir, name string, r io.Reader, overwrite bool) (Entry, error) {
-	name, err := cleanName(name)
+	name, err := cleanUploadName(name)
 	if err != nil {
 		return Entry{}, err
 	}
@@ -404,6 +423,14 @@ func (s *Service) Upload(token, dir, name string, r io.Reader, overwrite bool) (
 	target := name
 	if cleanDir != "." {
 		target = path.Join(cleanDir, name)
+	}
+	if parent := path.Dir(target); parent != "." {
+		if err := root.MkdirAll(parent, 0o755); err != nil {
+			if blockedByFile(root, parent) {
+				return Entry{}, ErrNotDir
+			}
+			return Entry{}, mapError(err)
+		}
 	}
 	if _, err := root.Lstat(target); err == nil {
 		if !overwrite {
@@ -611,6 +638,34 @@ func (s *Service) Copy(token, from, destDir string) (string, error) {
 		}
 	}
 	return dst, nil
+}
+
+// blockedByFile reports whether a directory path cannot be created because one
+// of its components exists as a regular file.
+func blockedByFile(root *os.Root, dir string) bool {
+	current := ""
+	for _, segment := range strings.Split(dir, "/") {
+		if current == "" {
+			current = segment
+		} else {
+			current = current + "/" + segment
+		}
+		info, err := root.Lstat(current)
+		if err != nil {
+			return false
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			resolved, err := root.Stat(current)
+			if err != nil {
+				return false
+			}
+			info = resolved
+		}
+		if !info.IsDir() {
+			return true
+		}
+	}
+	return false
 }
 
 func copyTree(root *os.Root, src, dst string, depth int) error {

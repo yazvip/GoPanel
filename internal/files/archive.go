@@ -136,7 +136,7 @@ func (s *Service) Extract(token, rel, dest string) (Entry, error) {
 			return Entry{}, mapError(err)
 		}
 	}
-	if err := root.Mkdir(dest, 0o755); err != nil {
+	if err := root.MkdirAll(dest, 0o755); err != nil {
 		return Entry{}, mapError(err)
 	}
 
@@ -164,7 +164,7 @@ func (s *Service) Extract(token, rel, dest string) (Entry, error) {
 	if err != nil {
 		return Entry{}, mapError(err)
 	}
-	return entryFromInfo(dir, path.Base(dest), st), nil
+	return entryFromInfo(path.Dir(dest), path.Base(dest), st), nil
 }
 
 func uniqueName(root *os.Root, dir, name string) (string, error) {

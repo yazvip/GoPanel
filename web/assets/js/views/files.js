@@ -124,6 +124,16 @@ function joinPath(dir, name) {
   return `${dir.replace(/\/+$/, '')}/${name}`;
 }
 
+function relativeUploadPath(file) {
+  return (file.webkitRelativePath || file.name).replace(/\\/g, '/').replace(/^\/+/, '');
+}
+
+function archiveStem(path) {
+  const name = (path || '').split('/').pop();
+  const stem = name.replace(/\.(tar\.gz|tgz|zip)$/i, '');
+  return !stem || stem === '.' || stem === '..' ? 'extracted' : stem;
+}
+
 function parentPath(path) {
   const clean = (path || '').replace(/\/+$/, '');
   const idx = clean.lastIndexOf('/');
@@ -153,10 +163,12 @@ export async function render(ctx) {
   const searchInput = input({ class: 'input search-input', placeholder: t('files.searchPlaceholder'), type: 'search' });
   const rootSelect = select([], { class: 'select root-select' });
   const uploadInput = h('input', { type: 'file', multiple: true, hidden: true });
+  const folderInput = h('input', { type: 'file', multiple: true, webkitdirectory: true, hidden: true });
   const toolbar = h('div', { class: 'file-toolbar' }, rootSelect, crumbBox,
     h('div', { class: 'grow' }),
     searchInput,
     canWrite() ? button(t('files.upload'), { icon: 'upload', onClick: () => uploadInput.click() }) : null,
+    canWrite() ? button(t('files.uploadFolder'), { icon: 'folderUpload', onClick: () => folderInput.click() }) : null,
     canWrite() ? button(t('files.newFolder'), { icon: 'folderPlus', onClick: newFolder }) : null,
     canWrite() ? button(t('files.newFile'), { icon: 'filePlus', onClick: newFile }) : null,
     button(t('common.refresh'), { icon: 'refresh', onClick: () => loadDir(path) }));
@@ -166,11 +178,21 @@ export async function render(ctx) {
     card({ body: toolbar, flush: true }),
     h('div', { class: 'mt3' }, tableBox),
     uploadInput,
+    folderInput,
   );
 
   uploadInput.addEventListener('change', () => {
-    if (uploadInput.files && uploadInput.files.length) uploadFiles(Array.from(uploadInput.files));
+    const files = uploadInput.files ? Array.from(uploadInput.files) : [];
     uploadInput.value = '';
+    if (files.length) uploadFiles(files.map((file) => ({ file, rel: file.name })), t('files.uploadFiles'));
+  });
+
+  folderInput.addEventListener('change', () => {
+    const files = folderInput.files ? Array.from(folderInput.files) : [];
+    folderInput.value = '';
+    if (!files.length) return;
+    const items = files.map((file) => ({ file, rel: relativeUploadPath(file) }));
+    uploadFiles(items, t('files.uploadFolder'));
   });
 
   rootSelect.addEventListener('change', () => {
@@ -287,7 +309,7 @@ export async function render(ctx) {
           canWrite() ? iconButton('move', t('files.move'), () => transferEntry(entry, 'move')) : null,
           canWrite() ? iconButton('shield', t('files.chmod'), () => chmodEntry(entry)) : null,
           canWrite() ? iconButton('archive', t('files.archive'), () => archiveEntry(entry)) : null,
-          canWrite() && !entry.is_dir && /\.(zip|tar\.gz|tgz|tar)$/i.test(entry.name)
+          canWrite() && !entry.is_dir && /\.(zip|tar\.gz|tgz)$/i.test(entry.name)
             ? iconButton('packageOpen', t('files.extract'), () => extractEntry(entry)) : null,
           canWrite() ? iconButton('trash', t('common.delete'), () => deleteEntry(entry), 'danger') : null)));
       return row;
@@ -555,7 +577,7 @@ export async function render(ctx) {
   async function extractEntry(entry) {
     const dest = await promptDialog({
       title: t('files.extractTitle'), label: t('files.destination'), hint: t('files.destHint'),
-      value: parentPath(entry.path), confirmText: t('files.extract'),
+      value: joinPath(parentPath(entry.path), archiveStem(entry.path)), confirmText: t('files.extract'),
     });
     if (dest === null) return;
     try {
@@ -585,24 +607,29 @@ export async function render(ctx) {
     }
   }
 
-  async function uploadFiles(files) {
+  async function uploadFiles(items, title) {
     const bar = h('div', { class: 'progress-inline big' }, h('span', { style: { width: '0%' } }));
     const label = h('div', { class: 'muted small' }, t('files.uploading', { pct: 0 }));
+    const shown = items.slice(0, 12);
+    const list = h('div', { class: 'mb2' },
+      shown.map((item) => h('div', { class: 'mono small ellipsis' }, item.rel)),
+      items.length > shown.length ? h('div', { class: 'muted small' }, t('files.moreItems', { count: items.length - shown.length })) : null);
     const modal = openModal({
-      title: t('files.uploadFiles'),
+      title,
       size: 'modal-sm',
-      body: h('div', {}, h('div', { class: 'mb2' }, files.map((f) => h('div', { class: 'mono small ellipsis' }, f.name))), bar, label),
+      body: h('div', {}, list, bar, label),
     });
     let done = 0;
     try {
-      for (const file of files) {
+      for (const { file, rel } of items) {
         const form = new FormData();
         form.append('root', root);
         form.append('path', path);
         form.append('overwrite', 'true');
+        form.append('rel', rel);
         form.append('file', file, file.name);
         await api.upload('/files/upload', form, (pct) => {
-          const overall = Math.round(((done + pct / 100) / files.length) * 100);
+          const overall = Math.round(((done + pct / 100) / items.length) * 100);
           bar.firstChild.style.width = `${overall}%`;
           label.textContent = t('files.uploading', { pct: overall });
         });

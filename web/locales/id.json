@@ -336,6 +336,8 @@
   "files.newFile": "Berkas baru",
   "files.upload": "Unggah",
   "files.uploadFiles": "Unggah berkas",
+  "files.uploadFolder": "Unggah folder",
+  "files.moreItems": "…dan {count} lainnya",
   "files.dropFiles": "Lepaskan berkas di sini untuk mengunggah",
   "files.name": "Nama",
   "files.size": "Ukuran",

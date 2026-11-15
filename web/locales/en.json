@@ -336,6 +336,8 @@
   "files.newFile": "New file",
   "files.upload": "Upload",
   "files.uploadFiles": "Upload files",
+  "files.uploadFolder": "Upload folder",
+  "files.moreItems": "…and {count} more",
   "files.dropFiles": "Drop files here to upload",
   "files.name": "Name",
   "files.size": "Size",

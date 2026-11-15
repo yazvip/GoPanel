@@ -176,7 +176,7 @@ func (s *Server) handleFileUpload(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, errf(http.StatusBadRequest, "request.invalid_multipart", "expected a multipart upload: %v", err))
 		return
 	}
-	root, dir, overwrite := "", "", false
+	root, dir, rel, overwrite := "", "", "", false
 	var uploaded []files.Entry
 	for {
 		part, err := reader.NextPart()
@@ -205,8 +205,19 @@ func (s *Server) handleFileUpload(w http.ResponseWriter, r *http.Request) {
 			value, _ := io.ReadAll(io.LimitReader(part, 16))
 			overwrite = strings.TrimSpace(string(value)) == "true" || strings.TrimSpace(string(value)) == "1"
 			part.Close()
+		case "rel", "relpath":
+			// Folder uploads send the file's path relative to the target
+			// directory, because multipart strips directories from the file
+			// name itself.
+			value, _ := io.ReadAll(io.LimitReader(part, 4096))
+			rel = strings.TrimSpace(string(value))
+			part.Close()
 		case "file":
 			name := part.FileName()
+			if rel != "" {
+				name = rel
+				rel = ""
+			}
 			if name == "" {
 				part.Close()
 				continue
