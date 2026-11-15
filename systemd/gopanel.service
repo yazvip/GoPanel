@@ -5,6 +5,8 @@ After=network.target
 [Service]
 Type=simple
 EnvironmentFile=-/etc/default/gopanel
+Environment=GOMEMLIMIT=400MiB
+Environment=GOGC=50
 ExecStart=/opt/gopanel/gopanel -config /etc/gopanel/config.json
 Restart=on-failure
 RestartSec=5

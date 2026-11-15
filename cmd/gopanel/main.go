@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"syscall"
@@ -49,6 +50,14 @@ func main() {
 }
 
 func run() error {
+	// Cap memory on small VPS hosts (512 MB and below). Go's GC only honours
+	// GOMEMLIMIT when it is set, so apply a sane default here and let the
+	// environment override it.
+	if os.Getenv("GOMEMLIMIT") == "" {
+		debug.SetMemoryLimit(400 << 20) // 400 MiB
+	}
+	debug.SetGCPercent(50) // collect more often, keep peak memory lower
+
 	var (
 		configPath  = flag.String("config", "config.json", "path to the configuration file")
 		dev         = flag.Bool("dev", false, "development mode with fake system data")
@@ -131,7 +140,7 @@ func run() error {
 		PanelPort:    panelPort,
 	})
 
-	jobManager := jobs.New(st, cfg.LogDir, 3, logger)
+	jobManager := jobs.New(st, cfg.LogDir, 2, logger)
 	cronService := cronjobs.New(st, system, logger, cronjobs.Options{CronFile: cfg.CronFile, LogDir: cfg.LogDir})
 	appService := apps.New(system, logger)
 

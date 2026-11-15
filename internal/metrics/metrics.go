@@ -49,10 +49,10 @@ func New(st *store.Store, system sys.System, logger *slog.Logger, opts Options) 
 		logger = slog.Default()
 	}
 	if opts.Interval <= 0 {
-		opts.Interval = 30 * time.Second
+		opts.Interval = 60 * time.Second
 	}
 	if opts.Retention <= 0 {
-		opts.Retention = 7 * 24 * time.Hour
+		opts.Retention = 3 * 24 * time.Hour
 	}
 	return &Service{st: st, sys: system, logger: logger, opts: opts}
 }
