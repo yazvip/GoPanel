@@ -332,6 +332,56 @@ export function promptDialog({ title, label, placeholder = '', value = '', type 
   });
 }
 
+/* ---------------- context menu ---------------- */
+let activeContextMenu = null;
+
+// openContextMenu shows a menu at the given viewport coordinates. Items are
+// { label, icon, onClick, danger, disabled } or { separator: true }.
+export function openContextMenu(items, { x = 0, y = 0 } = {}) {
+  if (activeContextMenu) activeContextMenu();
+  const menu = h('div', { class: 'context-menu' });
+  const close = () => {
+    document.removeEventListener('mousedown', onOutside, true);
+    document.removeEventListener('keydown', onKey, true);
+    window.removeEventListener('resize', close);
+    window.removeEventListener('scroll', close, true);
+    menu.remove();
+    if (activeContextMenu === close) activeContextMenu = null;
+  };
+  const onOutside = (ev) => {
+    if (!menu.contains(ev.target)) close();
+  };
+  const onKey = (ev) => {
+    if (ev.key === 'Escape') close();
+  };
+  for (const item of items || []) {
+    if (!item) continue;
+    if (item.separator) {
+      menu.append(h('div', { class: 'context-sep' }));
+      continue;
+    }
+    menu.append(h('button', {
+      class: `context-item${item.danger ? ' danger' : ''}`,
+      type: 'button',
+      disabled: Boolean(item.disabled),
+      onClick: () => {
+        close();
+        if (item.onClick) item.onClick();
+      },
+    }, item.icon ? iconSpan(item.icon, 15) : null, h('span', {}, item.label)));
+  }
+  document.addEventListener('mousedown', onOutside, true);
+  document.addEventListener('keydown', onKey, true);
+  window.addEventListener('resize', close);
+  window.addEventListener('scroll', close, true);
+  document.body.append(menu);
+  activeContextMenu = close;
+  const rect = menu.getBoundingClientRect();
+  menu.style.left = `${Math.max(8, Math.min(x, window.innerWidth - rect.width - 8))}px`;
+  menu.style.top = `${Math.max(8, Math.min(y, window.innerHeight - rect.height - 8))}px`;
+  return { el: menu, close };
+}
+
 export function showCredentials({ title, username, password, database, note }) {
   const copy = (text) => copyText(text);
   return openModal({

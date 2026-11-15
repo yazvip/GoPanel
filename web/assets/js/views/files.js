@@ -3,7 +3,7 @@ import { t } from '../i18n.js';
 import {
   h, pageHeader, card, emptyState, button, iconButton, openModal, confirmDialog,
   promptDialog, field, input, select, textarea, loadingBlock, toast, toastError,
-  iconSpan, formatBytes, formatDate, copyText, fileKind,
+  iconSpan, formatBytes, formatDate, copyText, fileKind, openContextMenu,
 } from '../ui.js';
 import { canWrite } from '../main.js';
 
@@ -149,7 +149,7 @@ function isImage(entry) {
 }
 
 export async function render(ctx) {
-  const { outlet } = ctx;
+  const { outlet, setCleanup } = ctx;
   const page = h('div', { class: 'page' });
   outlet.replaceChildren(page);
 
@@ -159,6 +159,8 @@ export async function render(ctx) {
   let entries = [];
   let searchMode = false;
   const tableBox = h('div', {});
+  const dropHint = h('div', { class: 'drop-hint' }, iconSpan('upload', 22), h('span', {}, t('files.dropFiles')));
+  const dropZone = h('div', { class: 'dropzone' }, tableBox, dropHint);
   const crumbBox = h('div', { class: 'crumbs' });
   const searchInput = input({ class: 'input search-input', placeholder: t('files.searchPlaceholder'), type: 'search' });
   const rootSelect = select([], { class: 'select root-select' });
@@ -176,7 +178,7 @@ export async function render(ctx) {
   page.append(
     pageHeader(t('files.title'), t('files.subtitle')),
     card({ body: toolbar, flush: true }),
-    h('div', { class: 'mt3' }, tableBox),
+    h('div', { class: 'mt3' }, dropZone),
     uploadInput,
     folderInput,
   );
@@ -193,6 +195,61 @@ export async function render(ctx) {
     if (!files.length) return;
     const items = files.map((file) => ({ file, rel: relativeUploadPath(file) }));
     uploadFiles(items, t('files.uploadFolder'));
+  });
+
+  // Drag and drop uploads files and folders dropped on the listing.
+  const hasFileDrag = (ev) => Boolean(ev.dataTransfer && Array.from(ev.dataTransfer.types || []).includes('Files'));
+  let dragDepth = 0;
+  dropZone.addEventListener('dragenter', (ev) => {
+    if (!hasFileDrag(ev)) return;
+    ev.preventDefault();
+    dragDepth += 1;
+    dropZone.classList.add('dragover');
+  });
+  dropZone.addEventListener('dragover', (ev) => {
+    if (!hasFileDrag(ev)) return;
+    ev.preventDefault();
+    ev.dataTransfer.dropEffect = 'copy';
+  });
+  dropZone.addEventListener('dragleave', () => {
+    dragDepth = Math.max(0, dragDepth - 1);
+    if (!dragDepth) dropZone.classList.remove('dragover');
+  });
+  dropZone.addEventListener('drop', async (ev) => {
+    ev.preventDefault();
+    dragDepth = 0;
+    dropZone.classList.remove('dragover');
+    if (!canWrite()) {
+      toast(t('files.readOnly'), 'warn');
+      return;
+    }
+    const dropped = await droppedFiles(ev.dataTransfer);
+    if (!dropped.length) return;
+    uploadFiles(dropped, t('files.uploadFiles'));
+  });
+
+  // Without this the browser opens the dropped file in a new tab.
+  const blockBrowserDrop = (ev) => {
+    if (hasFileDrag(ev)) ev.preventDefault();
+  };
+  document.addEventListener('dragover', blockBrowserDrop);
+  document.addEventListener('drop', blockBrowserDrop);
+  let openMenu = null;
+  if (setCleanup) {
+    setCleanup(() => {
+      document.removeEventListener('dragover', blockBrowserDrop);
+      document.removeEventListener('drop', blockBrowserDrop);
+      if (openMenu) openMenu.close();
+    });
+  }
+
+  tableBox.addEventListener('contextmenu', (ev) => {
+    const row = ev.target.closest('tr.file-row');
+    if (!row) return;
+    ev.preventDefault();
+    const entry = entries.find((item) => item.name === row.dataset.name);
+    if (!entry) return;
+    openMenu = openContextMenu(contextItems(entry), { x: ev.clientX, y: ev.clientY });
   });
 
   rootSelect.addEventListener('change', () => {
@@ -333,6 +390,30 @@ export async function render(ctx) {
 
   function badgeLink() {
     return h('span', { class: 'badge badge-gray', title: t('files.symlink') }, 'link');
+  }
+
+  function contextItems(entry) {
+    const items = [];
+    if (entry.is_dir) {
+      items.push({ label: t('common.open'), icon: 'folderOpen', onClick: () => loadDir(entry.path) });
+      items.push({ label: t('files.download'), icon: 'download', onClick: () => triggerDownload(entry) });
+    } else {
+      items.push({ label: t('files.view'), icon: 'eye', onClick: () => openEntry(entry) });
+      items.push({ label: t('files.download'), icon: 'download', onClick: () => triggerDownload(entry) });
+    }
+    if (!canWrite()) return items;
+    items.push({ separator: true });
+    items.push({ label: t('files.rename'), icon: 'edit', onClick: () => renameEntry(entry) });
+    items.push({ label: t('files.copy'), icon: 'copy', onClick: () => transferEntry(entry, 'copy') });
+    items.push({ label: t('files.move'), icon: 'move', onClick: () => transferEntry(entry, 'move') });
+    items.push({ label: t('files.chmod'), icon: 'shield', onClick: () => chmodEntry(entry) });
+    items.push({ label: t('files.archive'), icon: 'archive', onClick: () => archiveEntry(entry) });
+    if (!entry.is_dir && /\.(zip|tar\.gz|tgz)$/i.test(entry.name)) {
+      items.push({ label: t('files.extract'), icon: 'packageOpen', onClick: () => extractEntry(entry) });
+    }
+    items.push({ separator: true });
+    items.push({ label: t('common.delete'), icon: 'trash', danger: true, onClick: () => deleteEntry(entry) });
+    return items;
   }
 
   function triggerDownload(entry) {
@@ -607,7 +688,7 @@ export async function render(ctx) {
     }
   }
 
-  async function uploadFiles(items, title) {
+  function uploadProgress(title, items) {
     const bar = h('div', { class: 'progress-inline big' }, h('span', { style: { width: '0%' } }));
     const label = h('div', { class: 'muted small' }, t('files.uploading', { pct: 0 }));
     const shown = items.slice(0, 12);
@@ -619,29 +700,149 @@ export async function render(ctx) {
       size: 'modal-sm',
       body: h('div', {}, list, bar, label),
     });
-    let done = 0;
+    return {
+      update(index, pct) {
+        const overall = Math.round(((index + pct / 100) / items.length) * 100);
+        bar.firstChild.style.width = `${overall}%`;
+        label.textContent = t('files.uploading', { pct: overall });
+      },
+      close() { modal.close(); },
+    };
+  }
+
+  async function uploadItem(item, overwrite, onProgress) {
+    const form = new FormData();
+    form.append('root', root);
+    form.append('path', path);
+    form.append('overwrite', overwrite ? 'true' : 'false');
+    form.append('rel', item.rel);
+    form.append('file', item.file, item.file.name);
+    await api.upload('/files/upload', form, onProgress);
+  }
+
+  function conflictDialog(count) {
+    return new Promise((resolve) => {
+      let settled = false;
+      const finish = (value) => {
+        if (settled) return;
+        settled = true;
+        resolve(value);
+      };
+      const modal = openModal({
+        title: t('files.conflictTitle'),
+        size: 'modal-sm',
+        body: h('div', { style: { fontSize: '13px' } }, t('files.conflictMessage', { count })),
+        footer: [
+          h('button', { class: 'btn', type: 'button', onClick: () => { finish('skip'); modal.close(); } }, t('files.skip')),
+          h('button', { class: 'btn btn-primary', type: 'button', onClick: () => { finish('replace'); modal.close(); } }, t('files.replace')),
+        ],
+        onClose: () => finish('skip'),
+      });
+    });
+  }
+
+  async function uploadFiles(items, title) {
+    const conflicts = [];
+    const progress = uploadProgress(title, items);
+    let failure = null;
     try {
-      for (const { file, rel } of items) {
-        const form = new FormData();
-        form.append('root', root);
-        form.append('path', path);
-        form.append('overwrite', 'true');
-        form.append('rel', rel);
-        form.append('file', file, file.name);
-        await api.upload('/files/upload', form, (pct) => {
-          const overall = Math.round(((done + pct / 100) / items.length) * 100);
-          bar.firstChild.style.width = `${overall}%`;
-          label.textContent = t('files.uploading', { pct: overall });
-        });
-        done += 1;
+      for (let i = 0; i < items.length; i += 1) {
+        const item = items[i];
+        try {
+          await uploadItem(item, false, (pct) => progress.update(i, pct));
+        } catch (err) {
+          if (err && err.code === 'files.exists') {
+            conflicts.push(item);
+            progress.update(i, 100);
+            continue;
+          }
+          throw err;
+        }
       }
-      modal.close();
+    } catch (err) {
+      failure = err;
+    }
+    progress.close();
+
+    if (failure) {
+      toastError(failure);
+      await loadDir(path);
+      return;
+    }
+    if (!conflicts.length) {
       toast(t('files.uploadSuccess'), 'success');
       await loadDir(path);
-    } catch (err) {
-      modal.close();
-      toastError(err);
+      return;
     }
+
+    const choice = await conflictDialog(conflicts.length);
+    let replaced = 0;
+    if (choice === 'replace') {
+      const replaceProgress = uploadProgress(t('files.replacing'), conflicts);
+      try {
+        for (let i = 0; i < conflicts.length; i += 1) {
+          await uploadItem(conflicts[i], true, (pct) => replaceProgress.update(i, pct));
+          replaced += 1;
+        }
+      } catch (err) {
+        replaceProgress.close();
+        toastError(err);
+        await loadDir(path);
+        return;
+      }
+      replaceProgress.close();
+    }
+    toast(t('files.uploadSummary', {
+      uploaded: items.length - conflicts.length,
+      replaced,
+      skipped: conflicts.length - replaced,
+    }), 'success');
+    await loadDir(path);
+  }
+
+  async function droppedFiles(dataTransfer) {
+    const entries = Array.from(dataTransfer.items || [])
+      .filter((item) => item.kind === 'file')
+      .map((item) => (item.webkitGetAsEntry ? item.webkitGetAsEntry() : null));
+    if (entries.length && entries.every(Boolean)) {
+      const out = [];
+      for (const entry of entries) {
+        await collectEntryFiles(entry, '', out);
+      }
+      return out;
+    }
+    return Array.from(dataTransfer.files || []).map((file) => ({ file, rel: file.name }));
+  }
+
+  async function collectEntryFiles(entry, prefix, out) {
+    if (entry.isFile) {
+      const file = await new Promise((resolve, reject) => entry.file(resolve, reject));
+      out.push({ file, rel: prefix + entry.name });
+      return;
+    }
+    if (!entry.isDirectory) return;
+    const children = await readDirectoryEntries(entry);
+    for (const child of children) {
+      await collectEntryFiles(child, `${prefix}${entry.name}/`, out);
+    }
+  }
+
+  function readDirectoryEntries(entry) {
+    return new Promise((resolve, reject) => {
+      const reader = entry.createReader();
+      const children = [];
+      const readBatch = () => {
+        reader.readEntries((batch) => {
+          if (!batch.length) {
+            resolve(children);
+            return;
+          }
+          children.push(...batch);
+          readBatch();
+        }, reject);
+      };
+      readBatch();
+    });
   }
 
   const ready = await loadRoots();
