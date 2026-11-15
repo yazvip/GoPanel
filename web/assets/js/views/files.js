@@ -11,6 +11,7 @@ const ICONS = { dir: 'folder', php: 'code', img: 'image', code: 'code', archive:
 
 const VIEW_KEY = 'gopanel.files.view';
 const SORT_KEY = 'gopanel.files.sort';
+const CLIP_KEY = 'gopanel.files.clipboard';
 
 // CodeMirror 5 is vendored under /assets/vendor/codemirror (embedded in the
 // binary) so the editor works offline and without loosening the panel CSP.
@@ -163,6 +164,27 @@ function readPref(key, fallback) {
 function writePref(key, value) {
   try {
     localStorage.setItem(key, JSON.stringify(value));
+  } catch { /* storage is optional */ }
+}
+
+// The clipboard keeps the paths that were copied or cut, together with the
+// root they belong to, so it survives navigating to another folder.
+function readClipboard() {
+  try {
+    const raw = localStorage.getItem(CLIP_KEY);
+    if (!raw) return null;
+    const clip = JSON.parse(raw);
+    if (!clip || !Array.isArray(clip.paths) || !clip.paths.length) return null;
+    return clip;
+  } catch {
+    return null;
+  }
+}
+
+function writeClipboard(clip) {
+  try {
+    if (clip) localStorage.setItem(CLIP_KEY, JSON.stringify(clip));
+    else localStorage.removeItem(CLIP_KEY);
   } catch { /* storage is optional */ }
 }
 
@@ -436,8 +458,17 @@ export async function render(ctx) {
   }
 
   function backgroundItems() {
-    const items = [{ label: t('files.upload'), icon: 'upload', onClick: () => uploadInput.click() }];
+    const items = [];
     if (canWrite()) {
+      items.push({
+        label: t('files.paste'),
+        icon: 'packageOpen',
+        disabled: !canPaste(),
+        title: canPaste() ? '' : t('files.clipboardEmpty'),
+        onClick: pasteClipboard,
+      });
+      items.push({ separator: true });
+      items.push({ label: t('files.upload'), icon: 'upload', onClick: () => uploadInput.click() });
       items.push({ label: t('files.uploadFolder'), icon: 'folderUpload', onClick: () => folderInput.click() });
       items.push({ separator: true });
       items.push({ label: t('files.newFolder'), icon: 'folderPlus', onClick: newFolder });
@@ -509,8 +540,8 @@ export async function render(ctx) {
         h('span', { class: 'fm-sel-size mono' }, formatBytes(total))),
       h('div', { class: 'grow' }),
       button(t('files.downloadZip'), { icon: 'archive', onClick: downloadSelection }),
-      canWrite() ? button(t('files.move'), { icon: 'move', onClick: () => bulkTransfer('move') }) : null,
-      canWrite() ? button(t('files.copy'), { icon: 'copy', onClick: () => bulkTransfer('copy') }) : null,
+      canWrite() ? button(t('files.moveTitle'), { icon: 'move', onClick: () => bulkTransfer('move') }) : null,
+      canWrite() ? button(t('files.copyTitle'), { icon: 'copy', onClick: () => bulkTransfer('copy') }) : null,
       canWrite() ? button(t('files.chmod'), { icon: 'shield', onClick: bulkChmod }) : null,
       canWrite() ? button(t('common.delete'), { icon: 'trash', onClick: bulkDelete }) : null,
       button(t('files.clearSelection'), { onClick: clearSelection }));
@@ -813,9 +844,19 @@ export async function render(ctx) {
     }
     if (!canWrite()) return items;
     items.push({ separator: true });
+    items.push({ label: t('files.cut'), icon: 'move', onClick: () => copyToClipboard('cut') });
+    items.push({ label: t('files.copy'), icon: 'copy', onClick: () => copyToClipboard('copy') });
+    items.push({
+      label: t('files.paste'),
+      icon: 'packageOpen',
+      disabled: !canPaste(),
+      title: canPaste() ? '' : t('files.clipboardEmpty'),
+      onClick: pasteClipboard,
+    });
+    items.push({ separator: true });
+    items.push({ label: t('files.copyTitle'), icon: 'copy', onClick: () => transferEntry(entry, 'copy') });
+    items.push({ label: t('files.moveTitle'), icon: 'move', onClick: () => transferEntry(entry, 'move') });
     items.push({ label: t('files.rename'), icon: 'edit', onClick: () => renameEntry(entry) });
-    items.push({ label: t('files.copy'), icon: 'copy', onClick: () => transferEntry(entry, 'copy') });
-    items.push({ label: t('files.move'), icon: 'move', onClick: () => transferEntry(entry, 'move') });
     items.push({ label: t('files.chmod'), icon: 'shield', onClick: () => chmodEntry(entry) });
     items.push({ label: t('files.archive'), icon: 'archive', onClick: () => archiveEntry(entry) });
     if (!entry.is_dir && /\.(zip|tar\.gz|tgz)$/i.test(entry.name)) {
@@ -824,6 +865,46 @@ export async function render(ctx) {
     items.push({ separator: true });
     items.push({ label: t('common.delete'), icon: 'trash', danger: true, onClick: () => deleteEntry(entry) });
     return items;
+  }
+
+  // The clipboard works across folders: copy or cut an item, open another
+  // folder and paste it there.
+  function canPaste() {
+    const clip = readClipboard();
+    return Boolean(clip && clip.root === root);
+  }
+
+  function copyToClipboard(mode) {
+    const paths = selectedPaths();
+    if (!paths.length) return;
+    writeClipboard({ root, mode, paths });
+    toast(mode === 'cut'
+      ? t('files.clipboardCut', { count: paths.length })
+      : t('files.clipboardCopied', { count: paths.length }), 'info');
+  }
+
+  async function pasteClipboard() {
+    const clip = readClipboard();
+    if (!clip) {
+      toast(t('files.clipboardEmpty'), 'warn');
+      return;
+    }
+    if (clip.root !== root) {
+      toast(t('files.clipboardOtherRoot'), 'warn');
+      return;
+    }
+    let done = 0;
+    for (const from of clip.paths) {
+      try {
+        await api.post(clip.mode === 'cut' ? '/files/move' : '/files/copy', { root, from, dest: path });
+        done += 1;
+      } catch (err) {
+        toastError(err);
+      }
+    }
+    if (clip.mode === 'cut' && done > 0) writeClipboard(null);
+    if (done) toast(t('files.pasted', { count: done }), 'success');
+    await loadDir(path);
   }
 
   function triggerDownload(entry) {
@@ -1023,7 +1104,7 @@ export async function render(ctx) {
       label: t('files.destination'),
       hint: mode === 'copy' ? t('files.copyHint') : t('files.moveHint'),
       value: entry.path,
-      confirmText: mode === 'copy' ? t('files.copy') : t('files.move'),
+      confirmText: mode === 'copy' ? t('files.copyTitle') : t('files.moveTitle'),
     });
     if (!dest || dest === entry.path) return;
     try {
@@ -1043,7 +1124,7 @@ export async function render(ctx) {
       label: t('files.destination'),
       hint: mode === 'copy' ? t('files.copyHint') : t('files.moveHint'),
       value: parentPath(path),
-      confirmText: mode === 'copy' ? t('files.copy') : t('files.move'),
+      confirmText: mode === 'copy' ? t('files.copyTitle') : t('files.moveTitle'),
     });
     if (!dest) return;
     let done = 0;

@@ -364,6 +364,7 @@ export function openContextMenu(items, { x = 0, y = 0 } = {}) {
       class: `context-item${item.danger ? ' danger' : ''}`,
       type: 'button',
       disabled: Boolean(item.disabled),
+      title: item.title || '',
       onClick: () => {
         close();
         if (item.onClick) item.onClick();
