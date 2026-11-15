@@ -186,11 +186,11 @@ export async function render(ctx) {
 
   const listing = h('div', { class: 'fm-listing', tabindex: '0' });
   const dropHint = h('div', { class: 'drop-hint' }, iconSpan('upload', 22), h('span', {}, t('files.dropFiles')));
-  const dropZone = h('div', { class: 'dropzone fm-drop' }, listing, dropHint);
+  const dropZone = h('div', { class: 'fm-drop' }, listing);
   const inspector = h('aside', { class: 'fm-inspector' });
   const selectBar = h('div', { class: 'fm-selectbar', hidden: true });
   const main = h('div', { class: 'fm-main' }, dropZone, selectBar);
-  const bodyBox = h('div', { class: 'fm-body' }, main, inspector);
+  const bodyBox = h('div', { class: 'fm-body' }, main, inspector, dropHint);
 
   const crumbBox = h('div', { class: 'crumbs fm-crumbs' });
   const searchInput = input({ class: 'input search-input', placeholder: t('files.searchPlaceholder'), type: 'search' });
@@ -427,7 +427,25 @@ export async function render(ctx) {
     if (!canWrite()) return actions;
     actions.push(iconButton('edit', t('files.rename'), () => renameEntry(entry)));
     actions.push(iconButton('trash', t('common.delete'), () => deleteEntry(entry), 'danger'));
+    // The same menu as a right click, for the people who never right click.
+    actions.push(iconButton('more', t('files.moreActions'), (ev) => {
+      const rect = ev.currentTarget.getBoundingClientRect();
+      openMenu = openContextMenu(contextItems(entry), { x: rect.left, y: rect.bottom + 4 });
+    }));
     return actions;
+  }
+
+  function backgroundItems() {
+    const items = [{ label: t('files.upload'), icon: 'upload', onClick: () => uploadInput.click() }];
+    if (canWrite()) {
+      items.push({ label: t('files.uploadFolder'), icon: 'folderUpload', onClick: () => folderInput.click() });
+      items.push({ separator: true });
+      items.push({ label: t('files.newFolder'), icon: 'folderPlus', onClick: newFolder });
+      items.push({ label: t('files.newFile'), icon: 'filePlus', onClick: newFile });
+    }
+    items.push({ separator: true });
+    items.push({ label: t('common.refresh'), icon: 'refresh', onClick: () => loadDir(path) });
+    return items;
   }
 
   function paintInspector() {
@@ -680,7 +698,13 @@ export async function render(ctx) {
 
   listing.addEventListener('contextmenu', (ev) => {
     const node = ev.target.closest('[data-path]');
-    if (!node) return;
+    if (!node) {
+      // The empty space of the listing offers the folder actions instead of
+      // the browser menu.
+      ev.preventDefault();
+      openMenu = openContextMenu(backgroundItems(), { x: ev.clientX, y: ev.clientY });
+      return;
+    }
     ev.preventDefault();
     const entry = entryByPath(node.dataset.path);
     if (!entry) return;
@@ -726,28 +750,28 @@ export async function render(ctx) {
     }
   });
 
-  // Drag and drop uploads files and folders dropped on the listing.
+  // Drag and drop uploads files and folders dropped anywhere on the page.
   const hasFileDrag = (ev) => Boolean(ev.dataTransfer && Array.from(ev.dataTransfer.types || []).includes('Files'));
   let dragDepth = 0;
-  dropZone.addEventListener('dragenter', (ev) => {
+  page.addEventListener('dragenter', (ev) => {
     if (!hasFileDrag(ev)) return;
     ev.preventDefault();
     dragDepth += 1;
-    dropZone.classList.add('dragover');
+    page.classList.add('dragover');
   });
-  dropZone.addEventListener('dragover', (ev) => {
+  page.addEventListener('dragover', (ev) => {
     if (!hasFileDrag(ev)) return;
     ev.preventDefault();
     ev.dataTransfer.dropEffect = 'copy';
   });
-  dropZone.addEventListener('dragleave', () => {
+  page.addEventListener('dragleave', () => {
     dragDepth = Math.max(0, dragDepth - 1);
-    if (!dragDepth) dropZone.classList.remove('dragover');
+    if (!dragDepth) page.classList.remove('dragover');
   });
-  dropZone.addEventListener('drop', async (ev) => {
+  page.addEventListener('drop', async (ev) => {
     ev.preventDefault();
     dragDepth = 0;
-    dropZone.classList.remove('dragover');
+    page.classList.remove('dragover');
     if (!canWrite()) {
       toast(t('files.readOnly'), 'warn');
       return;

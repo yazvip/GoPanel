@@ -345,6 +345,7 @@
   "files.replacing": "Replacing files…",
   "files.uploadSummary": "Upload finished: {uploaded} new, {replaced} replaced, {skipped} skipped.",
   "files.viewList": "List",
+  "files.moreActions": "More actions",
   "files.viewGrid": "Grid",
   "files.sortBy": "Sort",
   "files.sortName": "Name",

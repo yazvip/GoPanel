@@ -345,6 +345,7 @@
   "files.replacing": "Mengganti berkas…",
   "files.uploadSummary": "Unggahan selesai: {uploaded} baru, {replaced} diganti, {skipped} dilewati.",
   "files.viewList": "Daftar",
+  "files.moreActions": "Tindakan lainnya",
   "files.viewGrid": "Grid",
   "files.sortBy": "Urutkan",
   "files.sortName": "Nama",
