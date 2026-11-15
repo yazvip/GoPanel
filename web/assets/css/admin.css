@@ -1,0 +1,214 @@
+/* Databases, users, profile, settings, firewall, services and audit pages —
+   scoped styles.
+
+   Every rule is scoped to `.admin-page` (the page root these views put on
+   their container) or `.adm-modal` (a dialog opened from one of them), so the
+   rest of the panel is untouched. The look follows the file manager: a
+   console table with a sticky header, hairline rows, monospaced metadata and a
+   single scroll container, so the page itself never scrolls sideways. */
+
+.admin-page { }
+
+/* ---------- console tables ---------- */
+
+.admin-page .table-wrap {
+  max-height: min(64vh, 780px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.admin-page table.table { table-layout: fixed; width: 100%; }
+
+.admin-page table.table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--panel);
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border-strong);
+}
+
+.admin-page table.table td { padding: 12px 16px; vertical-align: middle; }
+.admin-page table.table tbody tr:last-child td { border-bottom: 0; }
+
+/* The action header sits over right-aligned buttons, so it aligns the same way. */
+.admin-page table.table th.col-actions,
+.admin-page table.table td.col-actions { text-align: right; }
+
+/* Numeric columns read as an instrument: tabular, monospaced, right aligned. */
+.admin-page table.table th.col-num { text-align: right; }
+.admin-page table.table td.col-num {
+  text-align: right;
+  font-family: var(--mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Identity cell: a name, an optional badge, and a metadata line underneath. */
+.admin-page table.table .cell-name { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.admin-page table.table .cell-name > b { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.admin-page table.table .cell-name > .badge { flex: 0 0 auto; }
+
+.admin-page table.table .cell-sub {
+  display: block;
+  color: var(--muted);
+  font-size: 11.5px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.admin-page table.table .cell-sub.mono { font-family: var(--mono); }
+.admin-page table.table .cell-sub + .cell-sub { margin-top: 2px; }
+
+/* Row buttons keep a comfortable target without breaking the row. */
+.admin-page .table-wrap .row-actions { gap: 5px; }
+.admin-page .table-wrap .row-actions .icon-btn { width: 30px; height: 30px; border-radius: 7px; }
+.admin-page .table-wrap .row-actions .icon-btn:focus-visible { outline-color: var(--primary); background: var(--primary-soft); color: var(--primary-text); }
+
+/* ---------- column widths ---------- */
+
+/* Every table states its own column widths, so the identity column keeps the
+   room it needs and the action column never turns into a wide empty gap. */
+.admin-page .adm-t-users table.table th.adm-col-user { width: 25%; }
+.admin-page .adm-t-users table.table th.adm-col-role { width: 12%; }
+.admin-page .adm-t-users table.table th.adm-col-lang { width: 8%; }
+.admin-page .adm-t-users table.table th.adm-col-2fa { width: 12%; }
+.admin-page .adm-t-users table.table th.adm-col-state { width: 11%; }
+.admin-page .adm-t-users table.table th.adm-col-login { width: 20%; }
+.admin-page .adm-t-users table.table th.adm-col-actions { width: 12%; }
+
+.admin-page .adm-t-databases table.table th.adm-col-name { width: 30%; }
+.admin-page .adm-t-databases table.table th.adm-col-user { width: 16%; }
+.admin-page .adm-t-databases table.table th.adm-col-size { width: 13%; }
+.admin-page .adm-t-databases table.table th.adm-col-tables { width: 10%; }
+.admin-page .adm-t-databases table.table th.adm-col-created { width: 18%; }
+.admin-page .adm-t-databases table.table th.adm-col-actions { width: 13%; }
+
+.admin-page .adm-t-dbusers table.table th.adm-col-user { width: 58%; }
+.admin-page .adm-t-dbusers table.table th.adm-col-host { width: 32%; }
+.admin-page .adm-t-dbusers table.table th.adm-col-actions { width: 10%; }
+
+.admin-page .adm-t-sessions table.table th.adm-col-device { width: 40%; }
+.admin-page .adm-t-sessions table.table th.adm-col-seen { width: 17%; }
+.admin-page .adm-t-sessions table.table th.adm-col-signed { width: 17%; }
+.admin-page .adm-t-sessions table.table th.adm-col-expires { width: 16%; }
+.admin-page .adm-t-sessions table.table th.adm-col-actions { width: 10%; }
+
+.admin-page .adm-t-rules table.table th.adm-col-idx { width: 5%; }
+.admin-page .adm-t-rules table.table th.adm-col-port { width: 12%; }
+.admin-page .adm-t-rules table.table th.adm-col-proto { width: 9%; }
+.admin-page .adm-t-rules table.table th.adm-col-from { width: 16%; }
+.admin-page .adm-t-rules table.table th.adm-col-action { width: 12%; }
+.admin-page .adm-t-rules table.table th.adm-col-comment { width: 33%; }
+.admin-page .adm-t-rules table.table th.adm-col-actions { width: 13%; }
+
+.admin-page .adm-t-services table.table th.adm-col-name { width: 52%; }
+.admin-page .adm-t-services table.table th.adm-col-state { width: 17%; }
+.admin-page .adm-t-services table.table th.adm-col-load { width: 18%; }
+.admin-page .adm-t-services table.table th.adm-col-actions { width: 13%; }
+
+.admin-page .adm-t-processes table.table th.adm-col-pid { width: 8%; }
+.admin-page .adm-t-processes table.table th.adm-col-name { width: 47%; }
+.admin-page .adm-t-processes table.table th.adm-col-user { width: 13%; }
+.admin-page .adm-t-processes table.table th.adm-col-cpu { width: 11%; }
+.admin-page .adm-t-processes table.table th.adm-col-mem { width: 11%; }
+.admin-page .adm-t-processes table.table th.adm-col-actions { width: 10%; }
+
+.admin-page .adm-t-mounts table.table th.adm-col-mount { width: 45%; }
+.admin-page .adm-t-mounts table.table th.adm-col-fs { width: 20%; }
+.admin-page .adm-t-mounts table.table th.adm-col-used { width: 35%; }
+
+.admin-page .adm-t-audit table.table th.adm-col-time { width: 17%; }
+.admin-page .adm-t-audit table.table th.adm-col-user { width: 15%; }
+.admin-page .adm-t-audit table.table th.adm-col-action { width: 22%; }
+.admin-page .adm-t-audit table.table th.adm-col-detail { width: 32%; }
+.admin-page .adm-t-audit table.table th.adm-col-result { width: 14%; }
+
+/* ---------- per-table minimums (so no column is ever squeezed) ---------- */
+
+.admin-page .adm-t-users table.table { min-width: 940px; }
+.admin-page .adm-t-databases table.table { min-width: 860px; }
+.admin-page .adm-t-dbusers table.table { min-width: 480px; }
+.admin-page .adm-t-sessions table.table { min-width: 760px; }
+.admin-page .adm-t-rules table.table { min-width: 860px; }
+.admin-page .adm-t-services table.table { min-width: 820px; }
+.admin-page .adm-t-processes table.table { min-width: 900px; }
+.admin-page .adm-t-mounts table.table { min-width: 520px; }
+.admin-page .adm-t-audit table.table { min-width: 900px; }
+
+/* ---------- stat strip ---------- */
+
+/* Label, value and meter share one baseline across the strip, so the numbers
+   line up even when only some cards carry a meter. */
+.admin-page .stats-grid .stat { align-items: stretch; }
+.admin-page .stats-grid .stat-icon { align-self: flex-start; margin-top: 1px; }
+.admin-page .stats-grid .stat-body { display: flex; flex-direction: column; }
+.admin-page .stats-grid .stat-value { font-variant-numeric: tabular-nums; }
+.admin-page .stats-grid .meter { margin-top: auto; }
+
+/* ---------- forms ---------- */
+
+/* Two fields side by side: the labels and the controls share one line, and a
+   hint under one field never pushes the other one out of alignment. */
+.admin-page .form-row,
+.adm-modal .form-row { align-items: flex-start; }
+.admin-page .form-row > .field { flex: 1 1 190px; min-width: 0; }
+.adm-modal .form-row > .field { flex: 1 1 130px; min-width: 0; }
+
+/* A field that carries a switch keeps the switch and its hint together. */
+.admin-page .field-switch { display: flex; flex-direction: column; align-items: flex-start; gap: 7px; }
+.admin-page .field-switch .hint { margin-top: 0; }
+
+/* A path stays in monospace and can be copied without leaving the row. */
+.admin-page .adm-copy-row { justify-content: flex-end; min-width: 0; }
+.admin-page .adm-copy-row > .ellipsis { min-width: 0; }
+.admin-page .adm-copy-row .icon-btn { width: 30px; height: 30px; border-radius: 7px; flex: 0 0 auto; }
+
+/* The label/value list keeps a fixed label column and lets the value shrink,
+   so a long path wraps inside its own cell instead of pushing the card wide. */
+.admin-page .kv-rows dd { min-width: 0; }
+.admin-page .kv-rows dd .mono { min-width: 0; overflow-wrap: anywhere; }
+
+/* ---------- states ---------- */
+
+/* Loading, empty and error share one rhythm: the same centred block, the same
+   padding, the same optional action underneath. */
+.admin-page .empty,
+.admin-page .loading-block { padding: 52px 20px; }
+.admin-page .loading-block { flex-direction: column; gap: 12px; }
+.admin-page .empty-text { max-width: 56ch; margin-left: auto; margin-right: auto; }
+
+.admin-page .adm-state-error .empty-icon {
+  border-color: var(--danger);
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+.admin-page .adm-state-error .empty-title { color: var(--danger-text); }
+
+.admin-page .alert-title { font-weight: 600; }
+.admin-page .alert-detail { font-size: 12px; opacity: .85; margin-top: 3px; word-break: break-word; }
+
+/* ---------- tabs ---------- */
+
+.admin-page .tabs { padding: 0; gap: 2px; }
+.admin-page .tab { padding: 10px 14px; border-radius: 8px 8px 0 0; border-bottom: 1px solid transparent; }
+.admin-page .tab.active { border-bottom-color: var(--primary); }
+
+/* ---------- pager ---------- */
+
+.admin-page .pager { margin: 0; }
+.admin-page .pager .btn { min-width: 84px; }
+
+/* ---------- narrow screens ---------- */
+
+@media (max-width: 700px) {
+  .admin-page .table-wrap .row-actions .icon-btn { width: 34px; height: 34px; }
+  .admin-page .adm-copy-row .icon-btn { width: 34px; height: 34px; }
+  .admin-page .form-row > .field,
+  .adm-modal .form-row > .field { flex: 1 1 100%; }
+  .admin-page .table-wrap { max-height: none; }
+  .admin-page .kv-rows { grid-template-columns: 96px minmax(0, 1fr); }
+}

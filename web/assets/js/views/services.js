@@ -2,14 +2,47 @@ import { api } from '../api.js';
 import { t } from '../i18n.js';
 import {
   h, pageHeader, card, badge, dataTable, emptyState, button, iconButton,
-  openModal, confirmDialog, input, loadingBlock, toast, toastError, iconSpan,
+  confirmDialog, input, loadingBlock, toast, toastError,
   formatBytes, formatDuration, percent, statCard,
 } from '../ui.js';
 import { canWrite } from '../main.js';
 
+/* Loading, empty and error all read as the same centred block. */
+function stateBlock(title, text, action, iconName, tone) {
+  const el = emptyState(title, text, action, iconName);
+  if (tone) el.classList.add(`adm-state-${tone}`);
+  return el;
+}
+
+/* systemd speaks in its own vocabulary; the panel says it in the operator's. */
+function stateLabel(state) {
+  const value = String(state || '').toLowerCase();
+  if (value === 'active') return t('status.active');
+  if (value === 'inactive') return t('status.inactive');
+  if (value === 'failed') return t('status.failed');
+  if (value === 'running') return t('status.running');
+  if (value === 'exited') return t('services.stateExited');
+  if (value === 'dead') return t('services.stateDead');
+  return t('common.unknown');
+}
+
+function stateTone(state) {
+  const value = String(state || '').toLowerCase();
+  if (value === 'active' || value === 'running') return 'green';
+  if (value === 'failed' || value === 'dead') return 'red';
+  return 'gray';
+}
+
+function loadLabel(state) {
+  const value = String(state || '').toLowerCase();
+  if (value === 'loaded') return t('services.stateLoaded');
+  if (value === 'not-found') return t('services.stateNotFound');
+  return state || '—';
+}
+
 export async function render(ctx) {
   const { outlet } = ctx;
-  const page = h('div', { class: 'page' });
+  const page = h('div', { class: 'page admin-page' });
   outlet.replaceChildren(page);
   let tab = 'services';
   let services = [];
@@ -18,7 +51,6 @@ export async function render(ctx) {
   let live = {};
   let filter = '';
   const content = h('div', {});
-
   page.append(
     pageHeader(t('services.title'), t('services.subtitle'),
       button(t('common.refresh'), { icon: 'refresh', onClick: load })),
@@ -32,11 +64,21 @@ export async function render(ctx) {
   // The process card (and its search input) is created once; repaints only
   // replace the table body so typing never loses focus.
   const searchInput = h('input', {
-    class: 'input search-input', type: 'search', placeholder: t('services.searchProcess'),
+    class: 'input search-input',
+    type: 'search',
+    placeholder: t('services.searchProcess'),
+    'aria-label': t('services.searchProcess'),
     onInput: (ev) => { filter = ev.target.value; paintProcesses(); },
   });
+  const procCount = badge('0', 'gray');
   const procBody = h('div', {});
-  const procCard = card({ flush: true, actions: searchInput, body: procBody });
+  const procCard = card({
+    class: 'adm-t-processes',
+    flush: true,
+    title: t('services.processes'),
+    actions: h('div', { class: 'row gap-sm' }, procCount, searchInput),
+    body: procBody,
+  });
 
   function switchTab(next) {
     tab = next;
@@ -59,7 +101,10 @@ export async function render(ctx) {
       live = dashboard && dashboard.overview ? (dashboard.overview.live || {}) : {};
       paint();
     } catch (err) {
-      content.replaceChildren(card({ body: h('div', { class: 'alert alert-danger' }, err.message) }));
+      content.replaceChildren(card({
+        body: stateBlock(t('services.loadFailed'), err.message,
+          button(t('common.retry'), { icon: 'refresh', onClick: load }), 'alert', 'error'),
+      }));
     }
   }
 
@@ -71,27 +116,45 @@ export async function render(ctx) {
 
   function paintServices() {
     if (!services.length) {
-      content.replaceChildren(card({ body: emptyState(t('services.noServices'), '', null, 'server') }));
+      content.replaceChildren(card({
+        body: stateBlock(t('services.noServices'), t('services.noServicesHint'), null, 'server'),
+      }));
       return;
     }
     content.replaceChildren(card({
+      class: 'adm-t-services',
       flush: true,
       body: dataTable([
-        { label: t('services.name'), render: (svc) => h('div', {},
-          h('div', { class: 'row gap-sm' }, h('b', { class: 'mono' }, svc.name),
-            badge(svc.active || 'unknown', svc.active === 'active' ? 'green' : svc.active === 'failed' ? 'red' : 'gray')),
-          h('div', { class: 'muted small ellipsis' }, svc.description || '')) },
-        { label: t('services.load'), render: (svc) => h('span', { class: 'mono muted small' }, svc.load || '—') },
-        { label: t('services.active'), render: (svc) => h('span', { class: 'muted small mono' }, svc.sub || '—') },
-        { label: t('services.actions'), className: 'col-actions', render: (svc) => canWrite()
-          ? h('div', { class: 'row-actions' },
-            svc.active === 'active'
-              ? iconButton('restart', t('services.restart'), () => action(svc, 'restart'))
-              : iconButton('play', t('services.start'), () => action(svc, 'start')),
-            svc.active === 'active'
-              ? iconButton('pause', t('services.stop'), () => action(svc, 'stop'))
-              : null)
-          : null },
+        {
+          label: t('services.name'),
+          className: 'adm-col-name',
+          render: (svc) => h('div', {},
+            h('div', { class: 'cell-name' }, h('b', { class: 'mono' }, svc.name)),
+            h('span', { class: 'cell-sub' }, svc.description || '')),
+        },
+        {
+          label: t('services.state'),
+          className: 'adm-col-state',
+          render: (svc) => badge(stateLabel(svc.active), stateTone(svc.active)),
+        },
+        {
+          label: t('services.loadState'),
+          className: 'adm-col-load',
+          render: (svc) => h('span', { class: 'muted small mono' }, loadLabel(svc.load)),
+        },
+        {
+          label: t('common.actions'),
+          className: 'col-actions adm-col-actions',
+          render: (svc) => (canWrite()
+            ? h('div', { class: 'row-actions' },
+              svc.active === 'active'
+                ? iconButton('restart', t('services.restart'), () => action(svc, 'restart'))
+                : iconButton('play', t('services.start'), () => action(svc, 'start')),
+              svc.active === 'active'
+                ? iconButton('pause', t('services.stop'), () => action(svc, 'stop'))
+                : null)
+            : null),
+        },
       ], services),
     }));
   }
@@ -105,25 +168,52 @@ export async function render(ctx) {
         || String(proc.user || '').toLowerCase().includes(q);
     });
     searchInput.value = filter;
+    procCount.textContent = String(list.length);
     procBody.replaceChildren(list.length ? dataTable([
-      { label: t('services.pid'), className: 'w-80', render: (p) => h('span', { class: 'mono' }, p.pid) },
-      { label: t('services.name'), render: (p) => h('div', {},
-        h('b', {}, p.name),
-        h('div', { class: 'muted small ellipsis', style: { maxWidth: '420px' } }, p.command || '')) },
-      { label: t('services.user'), render: (p) => h('span', { class: 'muted small' }, p.user || '—') },
-      { label: t('services.cpu'), className: 'w-80', render: (p) => `${(Number(p.cpu) || 0).toFixed(1)}%` },
-      { label: t('services.mem'), className: 'w-80', render: (p) => formatBytes(p.mem) },
-      { label: t('common.actions'), className: 'col-actions', render: (p) => canWrite()
-        ? h('div', { class: 'row-actions' },
-          iconButton('xCircle', t('services.kill'), () => killProcess(p), 'danger'))
-        : null },
-    ], list) : emptyState(t('services.noProcesses'), '', null, 'activity'));
+      {
+        label: t('services.pid'),
+        className: 'col-num adm-col-pid',
+        render: (p) => h('span', { class: 'mono' }, p.pid),
+      },
+      {
+        label: t('services.name'),
+        className: 'adm-col-name',
+        render: (p) => h('div', {},
+          h('div', { class: 'cell-name' }, h('b', {}, p.name)),
+          h('span', { class: 'cell-sub mono' }, p.command || '')),
+      },
+      {
+        label: t('services.user'),
+        className: 'adm-col-user',
+        render: (p) => h('span', { class: 'muted small' }, p.user || '—'),
+      },
+      {
+        label: t('services.cpu'),
+        className: 'col-num adm-col-cpu',
+        render: (p) => `${(Number(p.cpu) || 0).toFixed(1)}%`,
+      },
+      {
+        label: t('services.mem'),
+        className: 'col-num adm-col-mem',
+        render: (p) => formatBytes(p.mem),
+      },
+      {
+        label: t('common.actions'),
+        className: 'col-actions adm-col-actions',
+        render: (p) => (canWrite()
+          ? h('div', { class: 'row-actions' },
+            iconButton('xCircle', t('services.kill'), () => killProcess(p), 'danger'))
+          : null),
+      },
+    ], list) : stateBlock(t('services.noProcesses'), t('services.noProcessesHint'), null, 'activity'));
     if (content.firstChild !== procCard) content.replaceChildren(procCard);
   }
 
   function paintHost() {
     if (!host) {
-      content.replaceChildren(card({ body: emptyState(t('services.noServices'), '', null, 'server') }));
+      content.replaceChildren(card({
+        body: stateBlock(t('services.noServices'), t('services.noServicesHint'), null, 'server'),
+      }));
       return;
     }
     const memTotal = live.mem_total || host.mem_total || 0;
@@ -147,23 +237,37 @@ export async function render(ctx) {
             h('dt', {}, t('services.hostname')), h('dd', { class: 'mono' }, host.hostname || '—'),
             h('dt', {}, t('services.os')), h('dd', {}, host.os || '—'),
             h('dt', {}, t('services.kernel')), h('dd', { class: 'mono small' }, host.kernel || '—'),
-            h('dt', {}, t('services.arch')), h('dd', {}, host.arch || '—'),
+            h('dt', {}, t('services.arch')), h('dd', { class: 'mono' }, host.arch || '—'),
             h('dt', {}, t('services.localIp')), h('dd', { class: 'mono' }, host.local_ip || '—'),
             h('dt', {}, t('services.publicIp')), h('dd', { class: 'mono' }, host.public_ip || '—')),
         }),
         card({
+          class: 'adm-t-mounts',
           title: t('services.mounts'),
           icon: 'hardDrive',
+          actions: badge(String(mounts.length), 'gray'),
           flush: true,
           body: mounts.length ? dataTable([
-            { label: t('services.mountpoint'), render: (m) => h('div', {},
-              h('b', { class: 'mono small' }, m.mountpoint),
-              h('div', { class: 'muted small' }, m.device || '')) },
-            { label: t('services.filesystem'), render: (m) => h('span', { class: 'muted small' }, m.fstype || '—') },
-            { label: t('services.used'), render: (m) => h('div', {},
-              h('div', { class: 'small' }, `${formatBytes(m.used)} / ${formatBytes(m.total)}`),
-              h('div', { class: 'progress-inline' }, h('span', { style: { width: `${percent(m.used, m.total)}%` } }))) },
-          ], mounts) : emptyState(t('common.empty'), '', null, 'hardDrive'),
+            {
+              label: t('services.mountpoint'),
+              className: 'adm-col-mount',
+              render: (m) => h('div', {},
+                h('div', { class: 'cell-name' }, h('b', { class: 'mono small' }, m.mountpoint)),
+                h('span', { class: 'cell-sub mono' }, m.device || '')),
+            },
+            {
+              label: t('services.filesystem'),
+              className: 'adm-col-fs',
+              render: (m) => h('span', { class: 'muted small' }, m.fstype || '—'),
+            },
+            {
+              label: t('services.used'),
+              className: 'adm-col-used',
+              render: (m) => h('div', {},
+                h('div', { class: 'small mono' }, `${formatBytes(m.used)} / ${formatBytes(m.total)}`),
+                h('div', { class: 'progress-inline' }, h('span', { style: { width: `${percent(m.used, m.total)}%` } }))),
+            },
+          ], mounts) : stateBlock(t('services.noMounts'), '', null, 'hardDrive'),
         })),
     );
   }

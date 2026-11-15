@@ -1,0 +1,142 @@
+/* Sites page — scoped styles.
+   The website list is a console table: sticky header, hairline rows, one
+   scroll container, so the page itself never scrolls sideways. */
+
+.sites-body { min-width: 0; }
+
+/* ---------- the listing ---------- */
+
+.sites-scroll {
+  max-height: min(70vh, 820px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+.sites-scroll::-webkit-scrollbar { width: 10px; height: 10px; }
+.sites-scroll::-webkit-scrollbar-track { background: transparent; }
+.sites-scroll::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 8px; }
+.sites-scroll::-webkit-scrollbar-thumb:hover { background: var(--faint); }
+
+.sites-scroll table.table {
+  table-layout: fixed;
+  min-width: 900px;
+}
+
+.sites-scroll table.table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border-strong);
+  padding: 12px 16px;
+}
+
+.sites-scroll table.table td {
+  padding: 12px 16px;
+  vertical-align: middle;
+}
+
+.sites-scroll table.table tbody tr.is-off .sites-name b { color: var(--muted); }
+
+/* Column widths — the path column takes whatever is left over. */
+.sites-scroll table.table th.sites-col-site { width: 250px; }
+.sites-scroll table.table th.sites-col-domain { width: 210px; }
+.sites-scroll table.table th.sites-col-ssl { width: 150px; }
+.sites-scroll table.table th.sites-col-status { width: 104px; }
+.sites-scroll table.table th.col-actions { width: 150px; text-align: right; }
+/* The action buttons need the full column: four 28px buttons and their gaps
+   must not be squeezed into each other. */
+.sites-scroll table.table td.col-actions { padding-left: 8px; }
+
+/* Site cell */
+.sites-name { gap: 8px; }
+.sites-name b {
+  font-weight: 600;
+  flex: 0 1 auto;
+  min-width: 96px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sites-name .badge { flex: 0 0 auto; }
+
+/* Domain cell */
+.sites-domains { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.sites-domain {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--text);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sites-domain-chip {
+  flex: 0 1 auto;
+  max-width: 108px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10.5px;
+  color: var(--muted);
+  background: var(--panel-3);
+  border-radius: 5px;
+  padding: 2px 7px;
+}
+.sites-domain-more {
+  flex: 0 0 auto;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--primary-text);
+  background: var(--primary-soft);
+  border-radius: 5px;
+  padding: 2px 7px;
+  white-space: nowrap;
+}
+
+/* Path cell */
+.sites-path {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+/* SSL cell */
+.sites-ssl { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; }
+.sites-ssl-state { font-size: 12.5px; font-weight: 600; color: var(--success-text); }
+.sites-ssl-sub {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* Row actions */
+.sites-scroll .row-actions .icon-btn:focus-visible {
+  outline-color: var(--primary);
+  background: var(--primary-soft);
+  color: var(--primary-text);
+}
+.sites-scroll .sites-open { color: var(--primary-text); }
+.sites-scroll .sites-open:hover { background: var(--primary-soft); color: var(--primary-text); }
+
+/* ---------- forms ---------- */
+
+.sites-form .form-row { align-items: flex-start; }
+.sites-form .form-row > .field { flex: 1 1 210px; min-width: 0; }
+
+/* ---------- narrow screens ---------- */
+
+@media (max-width: 640px) {
+  .sites-scroll { max-height: none; }
+  .sites-scroll table.table { min-width: 940px; }
+  .sites-scroll table.table th.col-actions { width: 172px; }
+  .sites-scroll .row-actions .icon-btn { width: 34px; height: 34px; }
+}

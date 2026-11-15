@@ -11,7 +11,7 @@ import { watchJob, jobProgressModal } from '../jobwatch.js';
 
 export async function render(ctx) {
   const { outlet } = ctx;
-  const page = h('div', { class: 'page' });
+  const page = h('div', { class: 'page ops-page ops-backups' });
   outlet.replaceChildren(page);
   let tab = 'backups';
   let backups = [];
@@ -37,7 +37,7 @@ export async function render(ctx) {
   }
 
   async function load() {
-    content.replaceChildren(loadingBlock(t('backups.loading')));
+    content.replaceChildren(card({ body: loadingBlock(t('backups.loading')) }));
     try {
       [backups, schedules, sites, databases] = await Promise.all([
         api.get('/backups'),
@@ -54,8 +54,13 @@ export async function render(ctx) {
       databases = databases || [];
       paint();
     } catch (err) {
-      content.replaceChildren(card({ body: h('div', { class: 'alert alert-danger' }, err.message) }));
+      content.replaceChildren(card({ body: h('div', { class: 'alert alert-danger' }, iconSpan('alert', 16),
+        h('div', {}, h('b', {}, t('common.loadFailed')), h('div', { class: 'small' }, String(err.message || err)))) }));
     }
+  }
+
+  function kindBadge(kind) {
+    return kind === 'database' ? badge(t('backups.database'), 'violet') : badge(t('backups.site'), 'blue');
   }
 
   function paint() {
@@ -73,16 +78,17 @@ export async function render(ctx) {
     content.replaceChildren(card({
       flush: true,
       body: dataTable([
-        { label: t('common.name'), render: (b) => h('div', {},
+        { label: t('common.name'), className: 'ops-id', render: (b) => h('div', {},
           h('div', { class: 'row gap-sm' },
             h('b', {}, b.ref || b.id),
-            b.kind === 'database' ? badge(t('backups.database'), 'violet') : badge(t('backups.site'), 'blue')),
-          h('div', { class: 'muted small mono', title: b.id }, b.id.slice(0, 8))) },
-        { label: t('backups.size'), render: (b) => formatBytes(b.size) },
+            kindBadge(b.kind)),
+          h('span', { class: 'muted small mono ops-sub', title: b.id }, b.id.slice(0, 8))) },
+        { label: t('backups.size'), className: 'ops-num', render: (b) => formatBytes(b.size) },
         { label: t('backups.status'), render: (b) => h('div', {},
           statusBadge(b.status),
-          b.error ? h('div', { class: 'muted small', title: b.error }, b.error.slice(0, 60)) : null) },
-        { label: t('common.created'), render: (b) => h('span', { class: 'muted small', title: formatDate(b.created_at) }, relativeTime(b.created_at)) },
+          b.error ? h('div', { class: 'muted small ellipsis', title: b.error }, b.error) : null) },
+        { label: t('common.created'), className: 'nowrap', render: (b) => h('span', { class: 'muted small', title: formatDate(b.created_at) },
+          relativeTime(b.created_at)) },
         { label: t('common.actions'), className: 'col-actions', render: (b) => h('div', { class: 'row-actions' },
           b.status === 'success' ? iconButton('download', t('backups.download'), () => downloadBackup(b)) : null,
           canWrite() && b.status === 'success' ? iconButton('rotate', t('backups.restore'), () => openRestore(b)) : null,
@@ -103,13 +109,13 @@ export async function render(ctx) {
       flush: true,
       actions: canWrite() ? button(t('backups.addSchedule'), { size: 'sm', icon: 'plus', onClick: () => openSchedule(null) }) : null,
       body: dataTable([
-        { label: t('backups.target'), render: (s) => h('div', {},
-          h('div', { class: 'row gap-sm' }, h('b', {}, s.ref),
-            s.kind === 'database' ? badge(t('backups.database'), 'violet') : badge(t('backups.site'), 'blue')),
-          h('div', { class: 'muted small' }, s.enabled ? t('backups.enabled') : t('status.disabled'))) },
-        { label: t('backups.cronExpr'), render: (s) => h('code', { class: 'chip mono' }, s.cron_expr) },
-        { label: t('backups.retention'), render: (s) => t('backups.keepCount', { n: s.keep }) },
-        { label: t('backups.lastRun'), render: (s) => h('span', { class: 'muted small', title: formatDate(s.last_run_at) }, s.last_run_at ? relativeTime(s.last_run_at) : t('common.never')) },
+        { label: t('backups.target'), className: 'ops-id', render: (s) => h('div', {},
+          h('div', { class: 'row gap-sm' }, h('b', {}, s.ref), kindBadge(s.kind)),
+          h('span', { class: 'muted small ops-sub' }, s.enabled ? t('backups.enabled') : t('status.disabled'))) },
+        { label: t('backups.cronExpr'), className: 'nowrap', render: (s) => h('code', { class: 'chip mono' }, s.cron_expr) },
+        { label: t('backups.retention'), className: 'ops-num', render: (s) => t('backups.keepCount', { n: s.keep }) },
+        { label: t('backups.lastRun'), className: 'nowrap', render: (s) => h('span', { class: 'muted small', title: formatDate(s.last_run_at) },
+          s.last_run_at ? relativeTime(s.last_run_at) : t('common.never')) },
         { label: t('common.actions'), className: 'col-actions', render: (s) => h('div', { class: 'row-actions' },
           canWrite() ? iconButton('edit', t('common.edit'), () => openSchedule(s)) : null,
           canWrite() ? iconButton('trash', t('common.delete'), () => removeSchedule(s), 'danger') : null) },
@@ -141,14 +147,14 @@ export async function render(ctx) {
     const modal = openModal({
       title: t('backups.createTitle'),
       size: 'modal-sm',
-      body: [
+      body: h('div', { class: 'ops-form' }, [
         field(t('backups.kind'), kind),
         field(t('backups.target'), target, t('backups.targetHint'), true),
         field(t('backups.keep'), keep, t('backups.keepHint')),
-      ],
+      ]),
       footer: [
         button(t('common.cancel'), { onClick: () => modal.close() }),
-        button(t('backups.createBtn'), {
+        button(t('backups.create'), {
           variant: 'primary', icon: 'archive',
           onClick: async () => {
             if (!target.value) { toast(t('backups.targetRequired'), 'warn'); return; }
@@ -159,8 +165,8 @@ export async function render(ctx) {
                 keep: Number(keep.value) || 0,
               });
               modal.close();
-              toast(t('backups.jobStarted'), 'success');
-              if (job && job.id) trackJob(job.id, t('backups.createBtn'));
+              toast(t('backups.createdJob'), 'success');
+              if (job && job.id) trackJob(job.id, t('backups.create'));
             } catch (err) {
               toastError(err);
             }
@@ -189,31 +195,34 @@ export async function render(ctx) {
         await load();
       },
       onError: (ev) => {
-        progress.setError(ev.error || 'disconnected');
+        progress.setError(ev.error || t('ops.jobs.disconnected'));
         modal.close();
       },
     });
   }
 
   async function openRestore(backup) {
-    const confirm = input({ placeholder: backup.ref, class: 'input mono', autocomplete: 'off' });
+    const confirm = input({
+      placeholder: backup.ref, class: 'input mono', autocomplete: 'off',
+      'aria-label': t('backups.restoreConfirm', { name: backup.ref }),
+    });
     const modal = openModal({
       title: t('backups.restoreTitle'),
       size: 'modal-sm',
-      body: [
+      body: h('div', { class: 'ops-form' }, [
         h('div', { class: 'alert alert-warn' }, iconSpan('alert', 16),
           h('div', {}, h('div', { style: { fontWeight: '600' } }, backup.ref), h('div', { class: 'small' }, t('backups.restoreWarning')))),
         h('div', { class: 'muted small mb2' }, t('backups.restoreConfirm', { name: backup.ref })),
         confirm,
         h('div', { class: 'muted small mt2' }, t('backups.safetyBackup')),
-      ],
+      ]),
       footer: [
         button(t('common.cancel'), { onClick: () => modal.close() }),
         button(t('backups.restore'), {
           variant: 'danger',
           onClick: async () => {
             if (confirm.value.trim() !== backup.ref) {
-              toast(t('backups.restoreConfirm', { name: backup.ref }), 'warn');
+              toast(t('ops.backups.restoreMismatch', { name: backup.ref }), 'warn');
               return;
             }
             try {
@@ -239,7 +248,7 @@ export async function render(ctx) {
     const target = select(targetOptions(schedule ? schedule.kind : 'site'), { value: schedule ? schedule.ref : '' });
     const cron = input({ value: schedule ? schedule.cron_expr : '0 3 * * *', class: 'input mono', placeholder: '0 3 * * *' });
     const keep = input({ type: 'number', min: '1', value: schedule ? String(schedule.keep) : '7' });
-    const enabled = switchControl(t('backups.enabled'), schedule ? schedule.enabled : true);
+    const enabled = switchControl('', schedule ? schedule.enabled : true, { 'aria-label': t('backups.enabled') });
 
     kind.addEventListener('change', () => {
       target.replaceChildren(...targetOptions(kind.value).map((o) => h('option', { value: o.value }, o.label)));
@@ -248,11 +257,11 @@ export async function render(ctx) {
     const modal = openModal({
       title: editing ? t('backups.editSchedule') : t('backups.addSchedule'),
       size: 'modal-sm',
-      body: [
+      body: h('div', { class: 'ops-form' }, [
         formRow(field(t('backups.kind'), kind), field(t('backups.target'), target)),
         field(t('backups.cronExpr'), cron, t('backups.cronHint'), true),
         formRow(field(t('backups.keep'), keep, t('backups.keepHint')), field(t('backups.enabled'), enabled)),
-      ],
+      ]),
       footer: [
         button(t('common.cancel'), { onClick: () => modal.close() }),
         button(editing ? t('common.save') : t('common.create'), {
@@ -307,8 +316,8 @@ export async function render(ctx) {
 
   async function removeSchedule(schedule) {
     const ok = await confirmDialog({
-      title: t('common.delete'),
-      message: `${schedule.ref} (${schedule.cron_expr})`,
+      title: t('ops.backups.deleteScheduleTitle'),
+      message: t('ops.backups.deleteScheduleConfirm', { ref: schedule.ref }),
       confirmText: t('common.delete'),
       danger: true,
     });

@@ -2,7 +2,7 @@ import { api } from '../api.js';
 import { t } from '../i18n.js';
 import {
   h, pageHeader, card, badge, statusBadge, dataTable, emptyState, button, iconButton,
-  openModal, confirmDialog, field, input, textarea, select, checkbox, formRow,
+  openModal, confirmDialog, field, input, textarea, select, switchControl, formRow,
   loadingBlock, toast, toastError, iconSpan, formatDate, relativeTime, copyText,
 } from '../ui.js';
 import { canWrite } from '../main.js';
@@ -19,7 +19,7 @@ const PRESETS = [
 
 export async function render(ctx) {
   const { outlet } = ctx;
-  const page = h('div', { class: 'page' });
+  const page = h('div', { class: 'page ops-page ops-cron' });
   outlet.replaceChildren(page);
   let jobs = [];
   const content = h('div', {});
@@ -31,12 +31,13 @@ export async function render(ctx) {
   );
 
   async function load() {
-    content.replaceChildren(loadingBlock());
+    content.replaceChildren(card({ body: loadingBlock() }));
     try {
       jobs = (await api.get('/cron')) || [];
       paint();
     } catch (err) {
-      content.replaceChildren(card({ body: h('div', { class: 'alert alert-danger' }, err.message) }));
+      content.replaceChildren(card({ body: h('div', { class: 'alert alert-danger' }, iconSpan('alert', 16),
+        h('div', {}, h('b', {}, t('common.loadFailed')), h('div', { class: 'small' }, String(err.message || err)))) }));
     }
   }
 
@@ -51,13 +52,16 @@ export async function render(ctx) {
     content.replaceChildren(card({
       flush: true,
       body: dataTable([
-        { label: t('cron.name'), render: (job) => h('div', {},
+        { label: t('cron.name'), className: 'ops-id', render: (job) => h('div', {},
           h('div', { class: 'row gap-sm' }, h('b', {}, job.name),
             job.enabled ? null : badge(t('status.disabled'), 'gray')),
-          h('div', { class: 'muted small mono ellipsis', style: { maxWidth: '420px' } }, job.command)) },
-        { label: t('cron.schedule'), render: (job) => h('code', { class: 'chip mono' }, job.schedule) },
-        { label: t('common.status'), render: (job) => job.last_status ? statusBadge(job.last_status) : h('span', { class: 'muted small' }, t('common.never')) },
-        { label: t('cron.lastRun'), render: (job) => h('span', { class: 'muted small', title: formatDate(job.last_run_at) }, job.last_run_at ? relativeTime(job.last_run_at) : t('common.never')) },
+          h('span', { class: 'muted small mono ops-sub', title: job.command }, job.command)) },
+        { label: t('cron.schedule'), className: 'nowrap', render: (job) => h('code', { class: 'chip mono' }, job.schedule) },
+        { label: t('ops.cron.lastResult'), render: (job) => job.last_status
+          ? statusBadge(job.last_status)
+          : h('span', { class: 'muted small' }, t('common.never')) },
+        { label: t('cron.lastRun'), className: 'nowrap', render: (job) => h('span', { class: 'muted small', title: formatDate(job.last_run_at) },
+          job.last_run_at ? relativeTime(job.last_run_at) : t('common.never')) },
         { label: t('common.actions'), className: 'col-actions', render: (job) => h('div', { class: 'row-actions' },
           canWrite() ? iconButton('play', t('cron.runNow'), () => runNow(job)) : null,
           iconButton('filetext', t('common.logs'), () => openLog(job)),
@@ -77,7 +81,7 @@ export async function render(ctx) {
     );
     const schedule = input({ value: job ? job.schedule : '0 0 * * *', placeholder: t('cron.schedulePlaceholder'), class: 'input mono', required: true });
     const command = textarea({ rows: '4', placeholder: t('cron.commandPlaceholder'), value: job ? job.command : '', class: 'textarea mono' });
-    const enabled = checkbox(t('cron.enabled'), job ? job.enabled : true);
+    const enabled = switchControl('', job ? job.enabled : true, { 'aria-label': t('cron.enabled') });
 
     preset.addEventListener('change', () => {
       if (preset.value !== 'custom') schedule.value = preset.value;
@@ -88,12 +92,15 @@ export async function render(ctx) {
       preset.value = match ? match.expr : 'custom';
     });
 
+    const nameField = field(t('cron.name'), name, t('cron.nameHint'), true);
+    nameField.classList.add('ops-wide');
+
     const modal = openModal({
       title: editing ? t('cron.editTitle') : t('cron.createTitle'),
-      body: h('div', {},
+      body: h('div', { class: 'ops-form' },
         formRow(
-          field(t('cron.name'), name, t('cron.nameHint'), true),
-          field(t('cron.enabled'), h('div', { class: 'field-inline' }, enabled))),
+          nameField,
+          field(t('cron.enabled'), enabled)),
         formRow(
           field(t('cron.preset'), preset),
           field(t('cron.schedule'), schedule, t('cron.scheduleHint'), true)),
@@ -155,7 +162,7 @@ export async function render(ctx) {
       box.textContent = data.content || t('cron.emptyLog');
       box.scrollTop = box.scrollHeight;
     } catch (err) {
-      box.textContent = err.message;
+      box.textContent = String(err.message || err);
     }
   }
 

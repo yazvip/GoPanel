@@ -41,7 +41,7 @@ function categoryLabel(category) {
 
 export async function render(ctx) {
   const { outlet } = ctx;
-  const page = h('div', { class: 'page' });
+  const page = h('div', { class: 'page ops-page ops-apps' });
   outlet.replaceChildren(page);
   let items = [];
   let category = 'all';
@@ -50,14 +50,14 @@ export async function render(ctx) {
   const watched = new Set();
   const grid = h('div', {});
   const chips = h('div', { class: 'chips' });
-  const search = input({ type: 'search', placeholder: t('apps.searchPlaceholder'), class: 'input search-input' });
+  const search = input({ type: 'search', placeholder: t('apps.searchPlaceholder'), class: 'input search-input', 'aria-label': t('apps.searchPlaceholder') });
 
   page.append(
-    pageHeader(t('apps.title'), t('apps.subtitle'),
-      h('div', { class: 'page-actions' },
-        search,
-        canWrite() ? button(t('apps.updateCache'), { icon: 'refresh', onClick: updateCache, title: t('apps.updateHint') }) : null,
-        button(t('common.refresh'), { icon: 'rotate', onClick: load }))),
+    pageHeader(t('apps.title'), t('apps.subtitle'), [
+      search,
+      canWrite() ? button(t('apps.updateCache'), { icon: 'refresh', onClick: updateCache, title: t('apps.updateHint') }) : null,
+      button(t('apps.refreshCatalog'), { icon: 'rotate', onClick: load }),
+    ]),
     chips,
     grid,
   );
@@ -76,7 +76,7 @@ export async function render(ctx) {
   }
 
   async function load() {
-    grid.replaceChildren(loadingBlock(t('apps.loading')));
+    grid.replaceChildren(card({ body: loadingBlock(t('apps.loading')) }));
     try {
       let active = [];
       try {
@@ -96,7 +96,8 @@ export async function render(ctx) {
       paintGrid();
       for (const entry of installing.values()) watchInstall(entry.jobId);
     } catch (err) {
-      grid.replaceChildren(card({ body: h('div', { class: 'alert alert-danger' }, err.message) }));
+      grid.replaceChildren(card({ body: h('div', { class: 'alert alert-danger' }, iconSpan('alert', 16),
+        h('div', {}, h('b', {}, t('common.loadFailed')), h('div', { class: 'small' }, String(err.message || err)))) }));
     }
   }
 
@@ -110,7 +111,8 @@ export async function render(ctx) {
   function paintGrid() {
     const list = visibleItems();
     if (!list.length) {
-      grid.replaceChildren(card({ body: emptyState(t('apps.noApps'), t('apps.noAppsHint'), null, 'box') }));
+      grid.replaceChildren(card({ body: emptyState(t('apps.noApps'), t('apps.noAppsHint'),
+        button(t('apps.refreshCatalog'), { icon: 'rotate', onClick: load }), 'box') }));
       return;
     }
     if (category !== 'all') {
@@ -149,7 +151,8 @@ export async function render(ctx) {
       action = h('div', { class: 'app-installing' },
         h('div', { class: 'progress-inline' }, bar), label);
     } else if (installed) {
-      action = h('span', { class: 'installed-pill' }, iconSpan('checkCircle', 14), t('apps.installed'));
+      action = h('span', { class: 'installed-pill' }, iconSpan('checkCircle', 14),
+        app.version ? `${t('apps.installed')} ${app.version}` : t('apps.installed'));
     } else {
       action = button(t('apps.install'), { size: 'sm', icon: 'download', onClick: () => confirmInstall(app) });
     }
@@ -158,8 +161,7 @@ export async function render(ctx) {
         h('span', { class: 'app-icon' }, iconSpan(CATEGORY_ICON[app.category] || 'box', 20)),
         h('div', { class: 'grow' },
           h('div', { class: 'app-name' }, app.name, app.popular ? badge(t('apps.popular'), 'amber') : null),
-          h('div', { class: 'muted small' }, categoryLabel(app.category))),
-        installed ? badge(app.version || t('apps.installed'), 'green') : null),
+          h('div', { class: 'muted small' }, categoryLabel(app.category)))),
       h('p', { class: 'app-desc' }, app.description || ''),
       app.warning ? h('div', { class: 'alert alert-warn small' }, iconSpan('alert', 14), h('div', {}, app.warning)) : null,
       h('div', { class: 'app-meta' },
@@ -185,9 +187,9 @@ export async function render(ctx) {
 
   async function confirmInstall(app) {
     const ok = await confirmDialog({
-      title: t('apps.installTitle'),
+      title: `${t('apps.install')} ${app.name}`,
       message: t('apps.installConfirm', { name: app.name }),
-      note: (app.packages || []).join(' '),
+      note: `${t('apps.packages')}: ${(app.packages || []).join(', ')}`,
       confirmText: t('apps.install'),
     });
     if (!ok) return;
@@ -267,7 +269,7 @@ export async function render(ctx) {
         progress.setProgress(100, job.status === 'failed' ? (job.error || t('status.failed')) : t('common.done'));
         await load();
       },
-      onError: (ev) => progress.setError(ev.error || 'disconnected'),
+      onError: (ev) => progress.setError(ev.error || t('ops.jobs.disconnected')),
     });
   }
 

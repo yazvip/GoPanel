@@ -1,12 +1,11 @@
 import { api } from '../api.js';
 import { t } from '../i18n.js';
 import {
-  h, pageHeader, card, badge, statusBadge, dataTable, emptyState, button, iconButton,
-  openModal, input, loadingBlock, toast, toastError, formatDate, relativeTime, formatDuration,
-  copyText,
+  h, pageHeader, card, statusBadge, dataTable, emptyState, button, iconButton,
+  openModal, input, loadingBlock, toast, toastError, iconSpan, formatDate, relativeTime,
+  formatDuration, copyText,
 } from '../ui.js';
 import { watchJob } from '../jobwatch.js';
-import { navigate } from '../router.js';
 
 const STATUSES = ['', 'running', 'success', 'failed'];
 
@@ -18,7 +17,7 @@ function typeLabel(type) {
 
 export async function render(ctx) {
   const { outlet, setCleanup } = ctx;
-  const page = h('div', { class: 'page' });
+  const page = h('div', { class: 'page ops-page ops-jobs' });
   outlet.replaceChildren(page);
   let jobs = [];
   let status = '';
@@ -26,7 +25,7 @@ export async function render(ctx) {
   let poll = null;
   const content = h('div', {});
   const chips = h('div', { class: 'chips' });
-  const search = input({ type: 'search', placeholder: t('jobs.searchPlaceholder'), class: 'input search-input' });
+  const search = input({ type: 'search', placeholder: t('jobs.searchPlaceholder'), class: 'input search-input', 'aria-label': t('jobs.searchPlaceholder') });
 
   page.append(
     pageHeader(t('jobs.title'), t('jobs.subtitle'),
@@ -47,13 +46,14 @@ export async function render(ctx) {
   }
 
   async function load() {
-    if (!jobs.length) content.replaceChildren(loadingBlock());
+    if (!jobs.length) content.replaceChildren(card({ body: loadingBlock() }));
     try {
       jobs = (await api.get('/jobs?limit=200')) || [];
       paintChips();
       paint();
     } catch (err) {
-      content.replaceChildren(card({ body: h('div', { class: 'alert alert-danger' }, err.message) }));
+      content.replaceChildren(card({ body: h('div', { class: 'alert alert-danger' }, iconSpan('alert', 16),
+        h('div', {}, h('b', {}, t('common.loadFailed')), h('div', { class: 'small' }, String(err.message || err)))) }));
     }
     if (!poll) poll = setInterval(() => { if (jobs.some((job) => job.status === 'running')) load(); }, 5000);
   }
@@ -86,25 +86,31 @@ export async function render(ctx) {
     const list = filtered();
     if (!list.length) {
       content.replaceChildren(card({
-        body: emptyState(t('jobs.noJobs'), status || query ? t('jobs.noJobsFilter') : t('jobs.noJobsHint'), null, 'zap'),
+        body: emptyState(
+          status || query ? t('ops.jobs.noMatch') : t('jobs.noJobs'),
+          status || query ? t('jobs.noJobsFilter') : t('jobs.noJobsHint'),
+          null, 'zap'),
       }));
       return;
     }
     content.replaceChildren(card({
       flush: true,
       body: dataTable([
-        { label: t('jobs.type'), render: (job) => h('div', {},
+        { label: t('jobs.type'), className: 'ops-id', render: (job) => h('div', {},
           h('b', {}, typeLabel(job.type)),
           h('div', { class: 'muted small' },
-            `${job.created_by ? '#' + job.created_by : '—'} · `,
+            h('span', {}, job.created_by ? `#${job.created_by}` : '—'),
+            h('span', {}, ' · '),
             h('span', { class: 'mono', title: job.id }, job.id.slice(0, 8)))) },
         { label: t('common.status'), render: (job) => h('div', {},
           statusBadge(job.status),
           job.status === 'running'
-            ? h('div', { class: 'progress-inline mt1' }, h('span', { style: { width: `${Math.max(0, Math.min(100, job.progress || 0))}%` } }))
+            ? h('div', { class: 'ops-progress-cell mt1' }, h('div', { class: 'progress-inline' },
+              h('span', { style: { width: `${Math.max(0, Math.min(100, job.progress || 0))}%` } })),
+            h('span', { class: 'ops-pct' }, `${Math.max(0, Math.min(100, job.progress || 0))}%`))
             : null) },
-        { label: t('jobs.duration'), render: (job) => h('span', { class: 'muted small' }, duration(job)) },
-        { label: t('common.created'), render: (job) => h('span', { class: 'muted small', title: formatDate(job.created_at) },
+        { label: t('jobs.duration'), className: 'ops-num', render: (job) => duration(job) },
+        { label: t('common.created'), className: 'nowrap', render: (job) => h('span', { class: 'muted small', title: formatDate(job.created_at) },
           relativeTime(job.created_at)) },
         { label: t('common.actions'), className: 'col-actions', render: (job) => h('div', { class: 'row-actions' },
           iconButton('eye', t('jobs.view'), () => openDetail(job))) },
@@ -116,7 +122,7 @@ export async function render(ctx) {
     const live = job.status === 'running';
     const bar = h('div', { class: 'progress-inline big mt1' }, h('span', { style: { width: `${job.progress || 0}%` } }));
     const message = h('div', { class: 'muted small' }, job.message || '');
-    const output = h('pre', { class: 'log-view' }, job.output || (live ? t('jobs.waitingOutput') : t('common.none')));
+    const output = h('pre', { class: 'log-view' }, job.output || (live ? t('jobs.waitingOutput') : t('jobs.outputEmpty')));
     const errorBox = job.error ? h('div', { class: 'alert alert-danger small mt2' }, job.error) : null;
     let stop = () => {};
 
@@ -126,7 +132,7 @@ export async function render(ctx) {
       body: h('div', {},
         h('dl', { class: 'kv' },
           h('dt', {}, t('jobs.id')), h('dd', { class: 'mono small' }, job.id),
-          h('dt', {}, t('jobs.type')), h('dd', {}, job.type),
+          h('dt', {}, t('jobs.type')), h('dd', {}, typeLabel(job.type)),
           h('dt', {}, t('common.status')), h('dd', {}, statusBadge(job.status)),
           h('dt', {}, t('jobs.createdBy')), h('dd', {}, job.created_by ? `#${job.created_by}` : '—'),
           h('dt', {}, t('common.created')), h('dd', {}, formatDate(job.created_at)),
@@ -163,7 +169,7 @@ export async function render(ctx) {
             snap.status === 'failed' ? 'error' : 'success');
           load();
         },
-        onError: (ev) => { message.textContent = ev.message || ev.error || 'disconnected'; },
+        onError: (ev) => { message.textContent = ev.message || ev.error || t('ops.jobs.disconnected'); },
       });
     }
 

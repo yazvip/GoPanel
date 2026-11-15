@@ -167,7 +167,7 @@ function writePref(key, value) {
 }
 
 export async function render(ctx) {
-  const { outlet, setCleanup } = ctx;
+  const { outlet, setCleanup, query } = ctx;
   const page = h('div', { class: 'page fm-page' });
   outlet.replaceChildren(page);
 
@@ -565,6 +565,10 @@ export async function render(ctx) {
     }
     rootSelect.replaceChildren(...roots.map((r) => h('option', { value: r.token }, r.label || r.path)));
     root = roots[0].token;
+    // A deep link such as #/files?root=var-www&path=site opens that folder.
+    const wanted = query ? query.get('root') : '';
+    if (wanted && roots.some((r) => r.token === wanted)) root = wanted;
+    rootSelect.value = root;
     return true;
   }
 
@@ -1312,7 +1316,8 @@ export async function render(ctx) {
   const ready = await loadRoots();
   if (ready) {
     paintCrumbs();
-    await loadDir('');
+    const wanted = query ? query.get('path') : '';
+    await loadDir(wanted || '');
   }
   return page;
 }
