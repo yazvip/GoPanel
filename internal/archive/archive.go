@@ -420,3 +420,97 @@ func WriteZip(w io.Writer, root *os.Root, base string) error {
 	}
 	return zw.Close()
 }
+
+// WriteZipEntries writes every base into the same archive, each under its own
+// path, so a selection of files and folders keeps its structure.
+func WriteZipEntries(w io.Writer, root *os.Root, bases []string) error {
+	zw := zip.NewWriter(w)
+	for _, base := range bases {
+		prefix := strings.Trim(base, "/")
+		if prefix == "." {
+			prefix = ""
+		}
+		info, err := root.Lstat(base)
+		if err != nil {
+			zw.Close()
+			return err
+		}
+		if !info.IsDir() {
+			if err := writeZipFile(zw, root, base, prefix, info); err != nil {
+				zw.Close()
+				return err
+			}
+			continue
+		}
+		// Keep the folder itself in the archive, even when it is empty.
+		if prefix != "" {
+			dirHeader := &zip.FileHeader{Name: prefix + "/", Method: zip.Store}
+			dirHeader.SetMode(info.Mode())
+			if _, err := zw.CreateHeader(dirHeader); err != nil {
+				zw.Close()
+				return err
+			}
+		}
+		writeErr := walk(root, base, func(rel string, info os.FileInfo) error {
+			hdr, err := zip.FileInfoHeader(info)
+			if err != nil {
+				return err
+			}
+			hdr.Name = rel
+			if prefix != "" {
+				hdr.Name = path.Join(prefix, rel)
+			}
+			if info.IsDir() {
+				hdr.Name += "/"
+				hdr.Method = zip.Store
+			} else {
+				hdr.Method = zip.Deflate
+			}
+			dst, err := zw.CreateHeader(hdr)
+			if err != nil {
+				return err
+			}
+			if info.IsDir() {
+				return nil
+			}
+			f, err := root.Open(path.Join(base, rel))
+			if err != nil {
+				return err
+			}
+			_, err = io.Copy(dst, f)
+			closeErr := f.Close()
+			if err != nil {
+				return err
+			}
+			return closeErr
+		})
+		if writeErr != nil {
+			zw.Close()
+			return writeErr
+		}
+	}
+	return zw.Close()
+}
+
+func writeZipFile(zw *zip.Writer, root *os.Root, name, entry string, info os.FileInfo) error {
+	hdr, err := zip.FileInfoHeader(info)
+	if err != nil {
+		return err
+	}
+	hdr.Name = entry
+	hdr.Method = zip.Deflate
+	dst, err := zw.CreateHeader(hdr)
+	if err != nil {
+		return err
+	}
+	f, err := root.Open(name)
+	if err != nil {
+		return err
+	}
+	_, err = io.Copy(dst, f)
+	closeErr := f.Close()
+	if err != nil {
+		return err
+	}
+	return closeErr
+}

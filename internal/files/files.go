@@ -12,6 +12,8 @@ import (
 	"path"
 	"sort"
 	"strings"
+
+	"gopanel/internal/archive"
 )
 
 var (
@@ -472,6 +474,42 @@ func (s *Service) Upload(token, dir, name string, r io.Reader, overwrite bool) (
 		return Entry{}, err
 	}
 	return entryFromInfo(cleanDir, name, fi), nil
+}
+
+// OpenZip streams a zip archive of the given paths. The caller closes the
+// returned reader, which also releases the sandbox.
+func (s *Service) OpenZip(token string, rels []string) (io.ReadCloser, error) {
+	if len(rels) == 0 {
+		return nil, ErrInvalidName
+	}
+	root, _, err := s.open(token, ".")
+	if err != nil {
+		return nil, err
+	}
+	bases := make([]string, 0, len(rels))
+	for _, rel := range rels {
+		clean, err := cleanRel(rel)
+		if err != nil {
+			root.Close()
+			return nil, err
+		}
+		if clean == "." {
+			root.Close()
+			return nil, ErrForbidden
+		}
+		if _, err := root.Lstat(clean); err != nil {
+			root.Close()
+			return nil, mapError(err)
+		}
+		bases = append(bases, clean)
+	}
+	pr, pw := io.Pipe()
+	go func() {
+		writeErr := archive.WriteZipEntries(pw, root, bases)
+		pw.CloseWithError(writeErr)
+		root.Close()
+	}()
+	return pr, nil
 }
 
 func (s *Service) Mkdir(token, rel string) (Entry, error) {

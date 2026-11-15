@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -125,6 +126,56 @@ func TestUploadRejectsFileAsParentDirectory(t *testing.T) {
 	}
 	if string(data) != "body{}" {
 		t.Fatalf("app.css content = %q, want %q", data, "body{}")
+	}
+}
+
+func TestOpenZipHoldsSelectedItems(t *testing.T) {
+	svc, dir := newTestService(t)
+	if _, err := svc.Upload("root", "", "notes.txt", strings.NewReader("hello"), false); err != nil {
+		t.Fatalf("upload notes: %v", err)
+	}
+	if _, err := svc.Upload("root", "", "site/index.html", strings.NewReader("<h1>hi</h1>"), false); err != nil {
+		t.Fatalf("upload site: %v", err)
+	}
+
+	reader, err := svc.OpenZip("root", []string{"notes.txt", "site"})
+	if err != nil {
+		t.Fatalf("open zip: %v", err)
+	}
+	defer reader.Close()
+	data, err := io.ReadAll(reader)
+	if err != nil {
+		t.Fatalf("read zip: %v", err)
+	}
+	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("open archive: %v", err)
+	}
+	names := make([]string, 0, len(zr.File))
+	for _, f := range zr.File {
+		names = append(names, f.Name)
+	}
+	want := map[string]bool{"notes.txt": true, "site/": true, "site/index.html": true}
+	if len(names) != len(want) {
+		t.Fatalf("archive entries = %v, want %v", names, want)
+	}
+	for _, name := range names {
+		if !want[name] {
+			t.Fatalf("unexpected archive entry %q in %v", name, names)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(dir, "notes.txt")); err != nil {
+		t.Fatalf("source file must stay in place: %v", err)
+	}
+}
+
+func TestOpenZipRejectsMissingPath(t *testing.T) {
+	svc, _ := newTestService(t)
+	if _, err := svc.OpenZip("root", []string{"missing.txt"}); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("err = %v, want ErrNotFound", err)
+	}
+	if _, err := svc.OpenZip("root", nil); !errors.Is(err, ErrInvalidName) {
+		t.Fatalf("err = %v, want ErrInvalidName", err)
 	}
 }
 

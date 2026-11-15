@@ -9,6 +9,9 @@ import { canWrite } from '../main.js';
 
 const ICONS = { dir: 'folder', php: 'code', img: 'image', code: 'code', archive: 'archive', file: 'file' };
 
+const VIEW_KEY = 'gopanel.files.view';
+const SORT_KEY = 'gopanel.files.sort';
+
 // CodeMirror 5 is vendored under /assets/vendor/codemirror (embedded in the
 // binary) so the editor works offline and without loosening the panel CSP.
 const CM_BASE = '/assets/vendor/codemirror';
@@ -33,7 +36,7 @@ const CM_LANGS = {
   css: { mode: 'text/css', files: ['css'] },
   scss: { mode: 'text/x-scss', files: ['css'] },
   less: { mode: 'text/x-less', files: ['css'] },
-  sass: { mode: 'text/x-sass', files: ['css', 'sass'] },
+  sass: { mode: 'text/x-sass', files: ['css'] },
   json: { mode: 'application/json', files: ['javascript'] },
   json5: { mode: 'application/json', files: ['javascript'] },
   sql: { mode: 'text/x-sql', files: ['sql'] },
@@ -148,9 +151,24 @@ function isImage(entry) {
   return /\.(png|jpe?g|gif|webp|bmp|ico)$/i.test(entry.name || '');
 }
 
+function readPref(key, fallback) {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw === null ? fallback : JSON.parse(raw);
+  } catch {
+    return fallback;
+  }
+}
+
+function writePref(key, value) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch { /* storage is optional */ }
+}
+
 export async function render(ctx) {
   const { outlet, setCleanup } = ctx;
-  const page = h('div', { class: 'page' });
+  const page = h('div', { class: 'page fm-page' });
   outlet.replaceChildren(page);
 
   let roots = [];
@@ -158,30 +176,450 @@ export async function render(ctx) {
   let path = '';
   let entries = [];
   let searchMode = false;
-  const tableBox = h('div', {});
+  let view = readPref(VIEW_KEY, 'list');
+  if (view !== 'grid') view = 'list';
+  let sort = readPref(SORT_KEY, { key: 'name', dir: 'asc' });
+  if (!sort || !sort.key) sort = { key: 'name', dir: 'asc' };
+  const selected = new Set();
+  let anchor = null;
+  let focused = null;
+
+  const listing = h('div', { class: 'fm-listing', tabindex: '0' });
   const dropHint = h('div', { class: 'drop-hint' }, iconSpan('upload', 22), h('span', {}, t('files.dropFiles')));
-  const dropZone = h('div', { class: 'dropzone' }, tableBox, dropHint);
-  const crumbBox = h('div', { class: 'crumbs' });
+  const dropZone = h('div', { class: 'dropzone fm-drop' }, listing, dropHint);
+  const inspector = h('aside', { class: 'fm-inspector' });
+  const selectBar = h('div', { class: 'fm-selectbar', hidden: true });
+  const main = h('div', { class: 'fm-main' }, dropZone, selectBar);
+  const bodyBox = h('div', { class: 'fm-body' }, main, inspector);
+
+  const crumbBox = h('div', { class: 'crumbs fm-crumbs' });
   const searchInput = input({ class: 'input search-input', placeholder: t('files.searchPlaceholder'), type: 'search' });
-  const rootSelect = select([], { class: 'select root-select' });
+  const rootSelect = select([], { class: 'select fm-root' });
   const uploadInput = h('input', { type: 'file', multiple: true, hidden: true });
   const folderInput = h('input', { type: 'file', multiple: true, webkitdirectory: true, hidden: true });
-  const toolbar = h('div', { class: 'file-toolbar' }, rootSelect, crumbBox,
-    h('div', { class: 'grow' }),
-    searchInput,
-    canWrite() ? button(t('files.upload'), { icon: 'upload', onClick: () => uploadInput.click() }) : null,
-    canWrite() ? button(t('files.uploadFolder'), { icon: 'folderUpload', onClick: () => folderInput.click() }) : null,
-    canWrite() ? button(t('files.newFolder'), { icon: 'folderPlus', onClick: newFolder }) : null,
-    canWrite() ? button(t('files.newFile'), { icon: 'filePlus', onClick: newFile }) : null,
-    button(t('common.refresh'), { icon: 'refresh', onClick: () => loadDir(path) }));
+
+  const viewToggle = h('div', { class: 'fm-segment' },
+    h('button', { class: 'fm-seg', type: 'button', dataset: { view: 'list' }, onClick: () => setView('list') },
+      iconSpan('list', 15), h('span', {}, t('files.viewList'))),
+    h('button', { class: 'fm-seg', type: 'button', dataset: { view: 'grid' }, onClick: () => setView('grid') },
+      iconSpan('layers', 15), h('span', {}, t('files.viewGrid'))));
+
+  const sortButton = h('button', { class: 'fm-sort', type: 'button', onClick: openSortMenu },
+    iconSpan('filter', 14), h('span', { class: 'fm-sort-label' }), iconSpan('chevronDown', 14));
+
+  const toolbar = h('div', { class: 'fm-toolbar' },
+    h('div', { class: 'fm-bar' },
+      rootSelect,
+      iconButton('arrowUpCircle', t('files.parent'), () => loadDir(parentPath(path)), 'fm-up'),
+      crumbBox,
+      h('div', { class: 'grow' }),
+      searchInput),
+    h('div', { class: 'fm-bar fm-bar-sub' },
+      viewToggle,
+      sortButton,
+      h('div', { class: 'grow' }),
+      canWrite() ? button(t('files.upload'), { icon: 'upload', onClick: () => uploadInput.click() }) : null,
+      canWrite() ? button(t('files.uploadFolder'), { icon: 'folderUpload', onClick: () => folderInput.click() }) : null,
+      canWrite() ? button(t('files.newFolder'), { icon: 'folderPlus', onClick: newFolder }) : null,
+      canWrite() ? button(t('files.newFile'), { icon: 'filePlus', onClick: newFile }) : null,
+      button(t('common.refresh'), { icon: 'refresh', onClick: () => loadDir(path) })));
 
   page.append(
     pageHeader(t('files.title'), t('files.subtitle')),
     card({ body: toolbar, flush: true }),
-    h('div', { class: 'mt3' }, dropZone),
+    h('div', { class: 'mt3' }, bodyBox),
     uploadInput,
     folderInput,
   );
+
+  /* ---------------- selection ---------------- */
+
+  function entryByPath(target) {
+    return entries.find((item) => item.path === target) || null;
+  }
+
+  function visibleEntries() {
+    const dir = sort.dir === 'desc' ? -1 : 1;
+    const byName = (a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
+    return entries.slice().sort((a, b) => {
+      if (a.is_dir !== b.is_dir) return a.is_dir ? -1 : 1;
+      let result = 0;
+      if (sort.key === 'size') result = a.size - b.size;
+      else if (sort.key === 'modified') result = a.mtime - b.mtime;
+      else if (sort.key === 'type') result = fileKind(a).localeCompare(fileKind(b));
+      else result = byName(a, b);
+      if (result === 0) result = byName(a, b);
+      return result * dir;
+    });
+  }
+
+  function selectedPaths() {
+    return visibleEntries().map((item) => item.path).filter((p) => selected.has(p));
+  }
+
+  function selectOnly(entry) {
+    selected.clear();
+    if (entry) selected.add(entry.path);
+    anchor = entry ? entry.path : null;
+    focused = entry ? entry.path : null;
+    refreshSelectionState();
+  }
+
+  function toggleSelect(entry) {
+    if (!entry) return;
+    if (selected.has(entry.path)) selected.delete(entry.path);
+    else selected.add(entry.path);
+    anchor = entry.path;
+    focused = entry.path;
+    refreshSelectionState();
+  }
+
+  function selectRange(entry) {
+    const list = visibleEntries();
+    const from = list.findIndex((item) => item.path === anchor);
+    const to = list.findIndex((item) => item.path === entry.path);
+    if (from < 0 || to < 0) {
+      selectOnly(entry);
+      return;
+    }
+    const [low, high] = from < to ? [from, to] : [to, from];
+    for (let i = low; i <= high; i += 1) selected.add(list[i].path);
+    focused = entry.path;
+    refreshSelectionState();
+  }
+
+  function selectAll() {
+    selected.clear();
+    for (const entry of visibleEntries()) selected.add(entry.path);
+    refreshSelectionState();
+  }
+
+  function clearSelection() {
+    selected.clear();
+    focused = null;
+    anchor = null;
+    refreshSelectionState();
+  }
+
+  function applySelection(entry, ev) {
+    if (!entry) return;
+    if (ev.shiftKey && anchor) selectRange(entry);
+    else if (ev.ctrlKey || ev.metaKey) toggleSelect(entry);
+    else selectOnly(entry);
+  }
+
+  /* ---------------- painting ---------------- */
+
+  function paint() {
+    paintToolbarState();
+    paintListing();
+    paintInspector();
+    paintSelectBar();
+  }
+
+  // Selection changes only touch the affected rows, so the listing keeps its
+  // scroll position and the rows stay clickable while a range is picked.
+  function refreshSelectionState() {
+    for (const el of listing.querySelectorAll('[data-path]')) {
+      const isSelected = selected.has(el.dataset.path);
+      el.classList.toggle('is-selected', isSelected);
+      el.classList.toggle('is-focused', focused === el.dataset.path);
+      const box = el.querySelector('.fm-box');
+      if (box) box.classList.toggle('is-on', isSelected);
+    }
+    const list = visibleEntries();
+    const head = listing.querySelector('.fm-table thead .fm-box');
+    if (head) head.classList.toggle('is-on', list.length > 0 && list.every((entry) => selected.has(entry.path)));
+    paintInspector();
+    paintSelectBar();
+  }
+
+  function paintToolbarState() {
+    for (const seg of viewToggle.querySelectorAll('.fm-seg')) {
+      seg.classList.toggle('is-on', seg.dataset.view === view);
+    }
+    const label = sortButton.querySelector('.fm-sort-label');
+    label.textContent = `${t('files.sortBy')}: ${t(sortLabelKey(sort.key))} ${sort.dir === 'asc' ? '↑' : '↓'}`;
+  }
+
+  function paintListing() {
+    const list = visibleEntries();
+    if (!list.length) {
+      listing.replaceChildren(emptyState(
+        searchMode ? t('files.noResults') : t('files.emptyFolder'),
+        searchMode ? '' : t('files.emptyFolderHint'),
+        canWrite() && !searchMode ? h('div', { class: 'fm-empty-actions' },
+          button(t('files.upload'), { icon: 'upload', onClick: () => uploadInput.click() }),
+          button(t('files.uploadFolder'), { icon: 'folderUpload', onClick: () => folderInput.click() })) : null,
+        searchMode ? 'search' : 'folder'));
+      return;
+    }
+    listing.replaceChildren(...(view === 'grid' ? gridView(list) : listView(list)),
+      h('div', { class: 'fm-foot' }, t('files.folderHint')));
+    scrollFocusedIntoView();
+  }
+
+  function listView(list) {
+    const allSelected = list.length > 0 && list.every((entry) => selected.has(entry.path));
+    const head = h('thead', {}, h('tr', {},
+      h('th', { class: 'fm-check' }, h('span', {
+        class: `fm-box${allSelected ? ' is-on' : ''}`,
+        title: t('files.selectAll'),
+        onClick: () => (allSelected ? clearSelection() : selectAll()),
+      })),
+      sortHeader(t('files.name'), 'name'),
+      sortHeader(t('files.size'), 'size'),
+      sortHeader(t('files.permissions'), 'perm'),
+      sortHeader(t('files.modified'), 'modified'),
+      h('th', { class: 'fm-col-actions' })));
+    const rows = list.map((entry) => {
+      const kind = fileKind(entry);
+      const isSelected = selected.has(entry.path);
+      return h('tr', {
+        class: `fm-row${isSelected ? ' is-selected' : ''}${focused === entry.path ? ' is-focused' : ''}`,
+        dataset: { path: entry.path },
+      },
+        h('td', { class: 'fm-check' }, h('span', { class: `fm-box${isSelected ? ' is-on' : ''}` })),
+        h('td', { class: 'fm-name-cell' },
+          h('span', { class: `fm-glyph ${kind}` }, iconSpan(ICONS[kind] || 'file', 17)),
+          h('span', { class: 'fm-name', title: entry.name }, entry.name),
+          entry.is_link ? h('span', { class: 'badge badge-gray', title: t('files.symlink') }, 'link') : null),
+        h('td', { class: 'fm-cell mono' }, entry.is_dir ? '—' : formatBytes(entry.size)),
+        h('td', { class: 'fm-cell mono' }, entry.mode_oct || entry.mode || '—'),
+        h('td', { class: 'fm-cell mono' }, formatDate(entry.mtime)),
+        h('td', { class: 'fm-row-actions' }, h('div', { class: 'row-actions' }, rowActions(entry))));
+    });
+    return [h('div', { class: 'fm-scroll' }, h('table', { class: 'fm-table' }, head, h('tbody', {}, rows)))];
+  }
+
+  function gridView(list) {
+    return [h('div', { class: 'fm-grid' }, list.map((entry) => {
+      const kind = fileKind(entry);
+      const isSelected = selected.has(entry.path);
+      return h('button', {
+        class: `fm-card${isSelected ? ' is-selected' : ''}${focused === entry.path ? ' is-focused' : ''}`,
+        type: 'button',
+        dataset: { path: entry.path },
+      },
+        h('span', { class: `fm-card-glyph ${kind}` }, iconSpan(ICONS[kind] || 'file', 22)),
+        h('span', { class: 'fm-card-name' }, entry.name),
+        h('span', { class: 'fm-card-meta mono' }, entry.is_dir ? t('files.folder') : formatBytes(entry.size)));
+    }))];
+  }
+
+  function sortHeader(label, key) {
+    const active = sort.key === key;
+    return h('th', {
+      class: `fm-sortable${active ? ' is-on' : ''}`,
+      onClick: () => setSort(key),
+    }, h('span', {}, label), active ? h('span', { class: 'fm-caret' }, sort.dir === 'asc' ? '↑' : '↓') : null);
+  }
+
+  function rowActions(entry) {
+    const actions = [];
+    if (entry.is_dir) {
+      actions.push(iconButton('folderOpen', t('common.open'), () => loadDir(entry.path)));
+      actions.push(iconButton('download', t('files.download'), () => triggerDownload(entry)));
+    } else {
+      actions.push(iconButton('eye', t('files.view'), () => openEntry(entry)));
+      actions.push(iconButton('download', t('files.download'), () => triggerDownload(entry)));
+    }
+    if (!canWrite()) return actions;
+    actions.push(iconButton('edit', t('files.rename'), () => renameEntry(entry)));
+    actions.push(iconButton('trash', t('common.delete'), () => deleteEntry(entry), 'danger'));
+    return actions;
+  }
+
+  function paintInspector() {
+    const entry = focused ? entryByPath(focused) : null;
+    if (!entry) {
+      const total = entries.reduce((sum, item) => sum + (item.is_dir ? 0 : item.size), 0);
+      inspector.replaceChildren(h('div', { class: 'fm-insp' },
+        h('div', { class: 'fm-insp-kicker' }, t('files.contents')),
+        h('div', { class: 'fm-insp-name' }, rootLabel()),
+        h('div', { class: 'fm-insp-path mono' }, `${rootLabel()}/${path || ''}`),
+        h('dl', { class: 'fm-meta' },
+          metaRow(t('files.items'), String(entries.length)),
+          metaRow(t('files.totalSize'), formatBytes(total)))));
+      return;
+    }
+    const kind = fileKind(entry);
+    const many = selected.size > 1;
+    inspector.replaceChildren(h('div', { class: 'fm-insp' },
+      h('div', { class: `fm-insp-glyph ${kind}` }, iconSpan(ICONS[kind] || 'file', 26)),
+      h('div', { class: 'fm-insp-name' }, entry.name),
+      h('div', { class: 'fm-insp-path mono' }, `${rootLabel()}/${entry.path}`),
+      many ? h('div', { class: 'fm-insp-note' }, t('files.selectedCount', { count: selected.size })) : null,
+      h('dl', { class: 'fm-meta' },
+        metaRow(t('files.size'), entry.is_dir ? '—' : formatBytes(entry.size)),
+        metaRow(t('files.permissions'), entry.mode_oct || entry.mode || '—'),
+        metaRow(t('files.modified'), formatDate(entry.mtime)),
+        metaRow(t('files.type'), entry.mime || kindLabel(entry))),
+      h('div', { class: 'fm-insp-actions' }, inspectorActions(entry))));
+  }
+
+  function metaRow(label, value) {
+    return h('div', {}, h('dt', {}, label), h('dd', {}, value));
+  }
+
+  function inspectorActions(entry) {
+    const actions = [];
+    if (entry.is_dir) {
+      actions.push(button(t('common.open'), { icon: 'folderOpen', onClick: () => loadDir(entry.path) }));
+      actions.push(button(t('files.download'), { icon: 'download', onClick: () => triggerDownload(entry) }));
+    } else {
+      actions.push(button(t('files.view'), { icon: 'eye', onClick: () => openEntry(entry) }));
+      actions.push(button(t('files.download'), { icon: 'download', onClick: () => triggerDownload(entry) }));
+    }
+    if (!canWrite()) return actions;
+    actions.push(button(t('files.rename'), { icon: 'edit', onClick: () => renameEntry(entry) }));
+    actions.push(button(t('files.chmod'), { icon: 'shield', onClick: () => chmodEntry(entry) }));
+    return actions;
+  }
+
+  function paintSelectBar() {
+    const paths = selectedPaths();
+    selectBar.hidden = paths.length === 0;
+    if (!paths.length) return;
+    const total = paths.reduce((sum, p) => {
+      const entry = entryByPath(p);
+      return sum + (entry && !entry.is_dir ? entry.size : 0);
+    }, 0);
+    selectBar.replaceChildren(
+      h('div', { class: 'fm-sel-info' },
+        h('span', { class: 'fm-sel-count' }, t('files.selectedCount', { count: paths.length })),
+        h('span', { class: 'fm-sel-size mono' }, formatBytes(total))),
+      h('div', { class: 'grow' }),
+      button(t('files.downloadZip'), { icon: 'archive', onClick: downloadSelection }),
+      canWrite() ? button(t('files.move'), { icon: 'move', onClick: () => bulkTransfer('move') }) : null,
+      canWrite() ? button(t('files.copy'), { icon: 'copy', onClick: () => bulkTransfer('copy') }) : null,
+      canWrite() ? button(t('files.chmod'), { icon: 'shield', onClick: bulkChmod }) : null,
+      canWrite() ? button(t('common.delete'), { icon: 'trash', onClick: bulkDelete }) : null,
+      button(t('files.clearSelection'), { onClick: clearSelection }));
+  }
+
+  function kindLabel(entry) {
+    const kind = fileKind(entry);
+    if (kind === 'dir') return t('files.folder');
+    if (kind === 'archive') return t('files.typeArchive');
+    if (kind === 'img') return t('files.typeImage');
+    if (kind === 'code' || kind === 'php') return t('files.typeCode');
+    return t('files.typeFile');
+  }
+
+  function scrollFocusedIntoView() {
+    if (!focused) return;
+    for (const el of listing.querySelectorAll('[data-path]')) {
+      if (el.dataset.path === focused) {
+        el.scrollIntoView({ block: 'nearest' });
+        break;
+      }
+    }
+  }
+
+  /* ---------------- view state ---------------- */
+
+  function setView(next) {
+    view = next === 'grid' ? 'grid' : 'list';
+    writePref(VIEW_KEY, view);
+    paint();
+  }
+
+  function setSort(key) {
+    if (sort.key === key) sort.dir = sort.dir === 'asc' ? 'desc' : 'asc';
+    else sort = { key, dir: 'asc' };
+    writePref(SORT_KEY, sort);
+    paint();
+  }
+
+  function sortLabelKey(key) {
+    if (key === 'size') return 'files.sortSize';
+    if (key === 'modified') return 'files.sortModified';
+    if (key === 'type') return 'files.sortType';
+    return 'files.sortName';
+  }
+
+  function openSortMenu(ev) {
+    const rect = sortButton.getBoundingClientRect();
+    const options = ['name', 'size', 'modified', 'type'].map((key) => ({
+      label: `${t(sortLabelKey(key))} ${sort.key === key ? (sort.dir === 'asc' ? '↑' : '↓') : ''}`.trim(),
+      icon: key === 'name' ? 'filetext' : key === 'size' ? 'database' : key === 'modified' ? 'calendar' : 'layers',
+      onClick: () => setSort(key),
+    }));
+    openMenu = openContextMenu(options, { x: rect.left, y: rect.bottom + 4 });
+    ev.stopPropagation();
+  }
+
+  /* ---------------- navigation ---------------- */
+
+  async function loadRoots() {
+    try {
+      roots = await api.get('/files/roots');
+    } catch (err) {
+      listing.replaceChildren(card({ body: h('div', { class: 'alert alert-danger' }, err.message) }));
+      return false;
+    }
+    if (!roots || !roots.length) {
+      listing.replaceChildren(card({ body: emptyState(t('files.noRoots'), '', null, 'folder') }));
+      return false;
+    }
+    rootSelect.replaceChildren(...roots.map((r) => h('option', { value: r.token }, r.label || r.path)));
+    root = roots[0].token;
+    return true;
+  }
+
+  function paintCrumbs() {
+    const parts = (path || '').split('/').filter(Boolean);
+    const items = [h('button', {
+      class: 'crumb', type: 'button', onClick: () => loadDir(''),
+    }, iconSpan('home', 14), rootLabel())];
+    let acc = '';
+    for (const part of parts) {
+      acc = acc ? `${acc}/${part}` : part;
+      const target = acc;
+      items.push(h('span', { class: 'crumb-sep' }, '/'));
+      items.push(h('button', { class: 'crumb', type: 'button', onClick: () => loadDir(target) }, part));
+    }
+    crumbBox.replaceChildren(...items);
+  }
+
+  function rootLabel() {
+    const found = roots.find((r) => r.token === root);
+    return found ? (found.label || found.path) : t('files.root');
+  }
+
+  async function loadDir(next) {
+    path = next || '';
+    searchMode = false;
+    selected.clear();
+    focused = null;
+    anchor = null;
+    paintCrumbs();
+    listing.replaceChildren(loadingBlock(t('files.loading')));
+    try {
+      const data = await api.get(`/files${qs({ root, path })}`);
+      entries = data.entries || [];
+      paint();
+    } catch (err) {
+      listing.replaceChildren(card({ body: h('div', { class: 'alert alert-danger' }, err.message) }));
+    }
+  }
+
+  async function runSearch(q) {
+    searchMode = true;
+    selected.clear();
+    focused = null;
+    listing.replaceChildren(loadingBlock(t('common.loading')));
+    try {
+      const data = await api.get(`/files/search${qs({ root, path, q })}`);
+      entries = data.entries || [];
+      paint();
+    } catch (err) {
+      listing.replaceChildren(card({ body: h('div', { class: 'alert alert-danger' }, err.message) }));
+    }
+  }
+
+  /* ---------------- events ---------------- */
 
   uploadInput.addEventListener('change', () => {
     const files = uploadInput.files ? Array.from(uploadInput.files) : [];
@@ -195,6 +633,93 @@ export async function render(ctx) {
     if (!files.length) return;
     const items = files.map((file) => ({ file, rel: relativeUploadPath(file) }));
     uploadFiles(items, t('files.uploadFolder'));
+  });
+
+  rootSelect.addEventListener('change', () => {
+    root = rootSelect.value;
+    path = '';
+    searchMode = false;
+    searchInput.value = '';
+    loadDir('');
+  });
+
+  let searchTimer = null;
+  searchInput.addEventListener('input', () => {
+    if (searchTimer) clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => {
+      const q = searchInput.value.trim();
+      if (q) runSearch(q);
+      else { searchMode = false; loadDir(path); }
+    }, 350);
+  });
+
+  listing.addEventListener('click', (ev) => {
+    const node = ev.target.closest('[data-path]');
+    if (!node) {
+      if (!ev.target.closest('.fm-box')) clearSelection();
+      return;
+    }
+    const entry = entryByPath(node.dataset.path);
+    if (!entry) return;
+    if (ev.target.closest('.fm-row-actions')) return;
+    if (ev.target.closest('.fm-box')) toggleSelect(entry);
+    else applySelection(entry, ev);
+    listing.focus({ preventScroll: true });
+  });
+
+  listing.addEventListener('dblclick', (ev) => {
+    const node = ev.target.closest('[data-path]');
+    if (!node || ev.target.closest('.fm-row-actions')) return;
+    const entry = entryByPath(node.dataset.path);
+    if (entry) openEntry(entry);
+  });
+
+  listing.addEventListener('contextmenu', (ev) => {
+    const node = ev.target.closest('[data-path]');
+    if (!node) return;
+    ev.preventDefault();
+    const entry = entryByPath(node.dataset.path);
+    if (!entry) return;
+    if (!selected.has(entry.path)) selectOnly(entry);
+    openMenu = openContextMenu(contextItems(entry), { x: ev.clientX, y: ev.clientY });
+  });
+
+  listing.addEventListener('keydown', (ev) => {
+    const list = visibleEntries();
+    if (ev.key === 'Escape') {
+      clearSelection();
+      return;
+    }
+    if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'a') {
+      ev.preventDefault();
+      selectAll();
+      return;
+    }
+    if (!list.length) return;
+    const index = focused ? list.findIndex((item) => item.path === focused) : -1;
+    if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') {
+      ev.preventDefault();
+      const next = ev.key === 'ArrowDown'
+        ? Math.min(list.length - 1, index + 1)
+        : Math.max(0, index === -1 ? 0 : index - 1);
+      selectOnly(list[next]);
+      return;
+    }
+    const entry = focused ? entryByPath(focused) : null;
+    if (!entry) return;
+    if (ev.key === 'Enter') {
+      ev.preventDefault();
+      openEntry(entry);
+    } else if (ev.key === 'F2') {
+      ev.preventDefault();
+      renameEntry(entry);
+    } else if (ev.key === 'Delete') {
+      ev.preventDefault();
+      deleteEntry(entry);
+    } else if (ev.key === 'Backspace' && path) {
+      ev.preventDefault();
+      loadDir(parentPath(path));
+    }
   });
 
   // Drag and drop uploads files and folders dropped on the listing.
@@ -243,154 +768,7 @@ export async function render(ctx) {
     });
   }
 
-  tableBox.addEventListener('contextmenu', (ev) => {
-    const row = ev.target.closest('tr.file-row');
-    if (!row) return;
-    ev.preventDefault();
-    const entry = entries.find((item) => item.name === row.dataset.name);
-    if (!entry) return;
-    openMenu = openContextMenu(contextItems(entry), { x: ev.clientX, y: ev.clientY });
-  });
-
-  rootSelect.addEventListener('change', () => {
-    root = rootSelect.value;
-    path = '';
-    searchMode = false;
-    searchInput.value = '';
-    loadDir('');
-  });
-
-  let searchTimer = null;
-  searchInput.addEventListener('input', () => {
-    if (searchTimer) clearTimeout(searchTimer);
-    searchTimer = setTimeout(() => {
-      const q = searchInput.value.trim();
-      if (q) runSearch(q);
-      else { searchMode = false; loadDir(path); }
-    }, 350);
-  });
-
-  async function loadRoots() {
-    try {
-      roots = await api.get('/files/roots');
-    } catch (err) {
-      tableBox.replaceChildren(card({ body: h('div', { class: 'alert alert-danger' }, err.message) }));
-      return false;
-    }
-    if (!roots || !roots.length) {
-      tableBox.replaceChildren(card({ body: emptyState(t('files.noRoots'), '', null, 'folder') }));
-      return false;
-    }
-    rootSelect.replaceChildren(...roots.map((r) => h('option', { value: r.token }, r.label || r.path)));
-    root = roots[0].token;
-    return true;
-  }
-
-  function paintCrumbs() {
-    const parts = (path || '').split('/').filter(Boolean);
-    const items = [h('button', {
-      class: 'crumb', type: 'button', onClick: () => loadDir(''),
-    }, iconSpan('home', 14), rootLabel())];
-    let acc = '';
-    for (const part of parts) {
-      acc = acc ? `${acc}/${part}` : part;
-      const target = acc;
-      items.push(h('span', { class: 'crumb-sep' }, '/'));
-      items.push(h('button', { class: 'crumb', type: 'button', onClick: () => loadDir(target) }, part));
-    }
-    crumbBox.replaceChildren(...items);
-  }
-
-  function rootLabel() {
-    const found = roots.find((r) => r.token === root);
-    return found ? (found.label || found.path) : t('files.root');
-  }
-
-  async function loadDir(next) {
-    path = next || '';
-    searchMode = false;
-    paintCrumbs();
-    tableBox.replaceChildren(loadingBlock(t('files.loading')));
-    try {
-      const data = await api.get(`/files${qs({ root, path })}`);
-      entries = data.entries || [];
-      paintTable();
-    } catch (err) {
-      tableBox.replaceChildren(card({ body: h('div', { class: 'alert alert-danger' }, err.message) }));
-    }
-  }
-
-  async function runSearch(q) {
-    searchMode = true;
-    tableBox.replaceChildren(loadingBlock(t('common.loading')));
-    try {
-      const data = await api.get(`/files/search${qs({ root, path, q })}`);
-      entries = data.entries || [];
-      paintTable(true);
-    } catch (err) {
-      tableBox.replaceChildren(card({ body: h('div', { class: 'alert alert-danger' }, err.message) }));
-    }
-  }
-
-  function paintTable(fromSearch = false) {
-    if (!entries.length) {
-      tableBox.replaceChildren(card({
-        body: emptyState(fromSearch ? t('files.noResults') : t('files.emptyFolder'),
-          fromSearch ? '' : t('files.emptyFolderHint'),
-          canWrite() && !fromSearch ? button(t('files.upload'), { icon: 'upload', onClick: () => uploadInput.click() }) : null,
-          fromSearch ? 'search' : 'folder'),
-      }));
-      return;
-    }
-    const rows = entries.map((entry) => {
-      const kind = fileKind(entry);
-      const row = h('tr', { class: 'file-row', dataset: { name: entry.name } },
-        h('td', {},
-          h('div', { class: 'file-cell' },
-            h('span', { class: `file-icon ${kind}` }, iconSpan(ICONS[kind] || 'file', 18)),
-            h('button', {
-              class: 'file-name', type: 'button', title: entry.name,
-              onClick: () => openEntry(entry),
-            }, entry.name),
-            entry.is_link ? badgeLink() : null)),
-        h('td', { class: 'nowrap muted' }, entry.is_dir ? '—' : formatBytes(entry.size)),
-        h('td', { class: 'nowrap mono muted' }, entry.mode_oct || entry.mode || '—'),
-        h('td', { class: 'nowrap muted' }, formatDate(entry.mtime)),
-        h('td', { class: 'col-actions' }, h('div', { class: 'row-actions' },
-          entry.is_dir
-            ? iconButton('folderOpen', t('common.open'), () => loadDir(entry.path))
-            : iconButton('eye', t('files.view'), () => openEntry(entry)),
-          !entry.is_dir ? iconButton('download', t('files.download'), () => triggerDownload(entry)) : null,
-          canWrite() ? iconButton('edit', t('files.rename'), () => renameEntry(entry)) : null,
-          canWrite() ? iconButton('copy', t('files.copy'), () => transferEntry(entry, 'copy')) : null,
-          canWrite() ? iconButton('move', t('files.move'), () => transferEntry(entry, 'move')) : null,
-          canWrite() ? iconButton('shield', t('files.chmod'), () => chmodEntry(entry)) : null,
-          canWrite() ? iconButton('archive', t('files.archive'), () => archiveEntry(entry)) : null,
-          canWrite() && !entry.is_dir && /\.(zip|tar\.gz|tgz)$/i.test(entry.name)
-            ? iconButton('packageOpen', t('files.extract'), () => extractEntry(entry)) : null,
-          canWrite() ? iconButton('trash', t('common.delete'), () => deleteEntry(entry), 'danger') : null)));
-      return row;
-    });
-
-    tableBox.replaceChildren(card({
-      title: fromSearch ? `${t('files.searchResults')} — “${searchInput.value.trim()}”` : undefined,
-      icon: fromSearch ? 'search' : 'folder',
-      flush: true,
-      body: h('div', { class: 'table-scroll' }, h('table', { class: 'table file-table' },
-        h('thead', {}, h('tr', {},
-          h('th', {}, t('files.name')),
-          h('th', {}, t('files.size')),
-          h('th', {}, t('files.permissions')),
-          h('th', {}, t('files.modified')),
-          h('th', { class: 'col-actions' }, t('files.actions')))),
-        h('tbody', {}, rows))),
-      foot: h('div', { class: 'muted small' }, t('files.folderHint')),
-    }));
-  }
-
-  function badgeLink() {
-    return h('span', { class: 'badge badge-gray', title: t('files.symlink') }, 'link');
-  }
+  /* ---------------- actions ---------------- */
 
   function contextItems(entry) {
     const items = [];
@@ -400,6 +778,10 @@ export async function render(ctx) {
     } else {
       items.push({ label: t('files.view'), icon: 'eye', onClick: () => openEntry(entry) });
       items.push({ label: t('files.download'), icon: 'download', onClick: () => triggerDownload(entry) });
+    }
+    if (selected.size > 1) {
+      items.push({ separator: true });
+      items.push({ label: t('files.downloadZip'), icon: 'archive', onClick: downloadSelection });
     }
     if (!canWrite()) return items;
     items.push({ separator: true });
@@ -418,6 +800,16 @@ export async function render(ctx) {
 
   function triggerDownload(entry) {
     const a = h('a', { href: downloadURL(root, entry.path), download: entry.name });
+    document.body.append(a);
+    a.click();
+    a.remove();
+  }
+
+  function downloadSelection() {
+    const paths = selectedPaths();
+    if (!paths.length) return;
+    const url = api.downloadURL(`/files/download${qs({ root, paths: paths.join(',') })}`);
+    const a = h('a', { href: url, download: '' });
     document.body.append(a);
     a.click();
     a.remove();
@@ -615,6 +1007,32 @@ export async function render(ctx) {
     }
   }
 
+  async function bulkTransfer(mode) {
+    const paths = selectedPaths();
+    if (!paths.length) return;
+    const dest = await promptDialog({
+      title: mode === 'copy' ? t('files.copyTitle') : t('files.moveTitle'),
+      label: t('files.destination'),
+      hint: mode === 'copy' ? t('files.copyHint') : t('files.moveHint'),
+      value: parentPath(path),
+      confirmText: mode === 'copy' ? t('files.copy') : t('files.move'),
+    });
+    if (!dest) return;
+    let done = 0;
+    for (const from of paths) {
+      try {
+        await api.post(`/files/${mode}`, { root, from, dest });
+        done += 1;
+      } catch (err) {
+        toastError(err);
+      }
+    }
+    toast(mode === 'copy' ? t('files.copied') : t('files.moved'), 'success');
+    clearSelection();
+    await loadDir(path);
+    if (done === 0) return;
+  }
+
   async function chmodEntry(entry) {
     const mode = await promptDialog({
       title: t('files.chmodTitle'), label: t('files.chmod'), hint: t('files.chmodHint'),
@@ -628,6 +1046,25 @@ export async function render(ctx) {
     } catch (err) {
       toastError(err);
     }
+  }
+
+  async function bulkChmod() {
+    const paths = selectedPaths();
+    if (!paths.length) return;
+    const mode = await promptDialog({
+      title: t('files.chmodTitle'), label: t('files.chmod'), hint: t('files.chmodHint'),
+      value: '644', confirmText: t('common.apply'),
+    });
+    if (!mode) return;
+    for (const target of paths) {
+      try {
+        await api.post('/files/chmod', { root, path: target, mode });
+      } catch (err) {
+        toastError(err);
+      }
+    }
+    toast(t('files.chmodDone'), 'success');
+    await loadDir(path);
   }
 
   async function archiveEntry(entry) {
@@ -687,6 +1124,33 @@ export async function render(ctx) {
       toastError(err);
     }
   }
+
+  async function bulkDelete() {
+    const paths = selectedPaths();
+    if (!paths.length) return;
+    const names = paths.map((p) => p.split('/').pop());
+    const preview = names.slice(0, 3).join(', ') + (names.length > 3 ? '…' : '');
+    const ok = await confirmDialog({
+      title: t('common.delete'),
+      message: t('files.deleteSelected', { count: paths.length, names: preview }),
+      note: t('files.deleteConfirm'),
+      confirmText: t('common.delete'),
+      danger: true,
+    });
+    if (!ok) return;
+    for (const target of paths) {
+      try {
+        await api.post('/files/delete', { root, path: target });
+      } catch (err) {
+        toastError(err);
+      }
+    }
+    toast(t('files.deleted'), 'success');
+    clearSelection();
+    await loadDir(path);
+  }
+
+  /* ---------------- uploads ---------------- */
 
   function uploadProgress(title, items) {
     const bar = h('div', { class: 'progress-inline big' }, h('span', { style: { width: '0%' } }));

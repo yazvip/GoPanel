@@ -49,6 +49,10 @@ func (s *Server) handleFileStat(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleFileDownload(w http.ResponseWriter, r *http.Request) {
 	root, rel := s.fileParams(r)
+	if raw := strings.TrimSpace(r.URL.Query().Get("paths")); raw != "" {
+		s.streamZip(w, root, raw)
+		return
+	}
 	file, err := s.Files.OpenRead(root, rel)
 	if err != nil {
 		s.writeError(w, err)
@@ -80,6 +84,47 @@ func (s *Server) handleFileDownload(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Length", strconv.FormatInt(file.Info.Size(), 10))
 	_, _ = io.Copy(w, file.Reader)
+}
+
+// streamZip streams a zip of several selected paths without touching the disk.
+func (s *Server) streamZip(w http.ResponseWriter, root, raw string) {
+	rels := make([]string, 0, 4)
+	for _, part := range strings.Split(raw, ",") {
+		if part = strings.TrimSpace(part); part != "" {
+			rels = append(rels, part)
+		}
+	}
+	if len(rels) == 0 {
+		s.writeError(w, errf(http.StatusBadRequest, "files.no_file", "no file was selected"))
+		return
+	}
+	reader, err := s.Files.OpenZip(root, rels)
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	defer reader.Close()
+	name := zipName(rels)
+	w.Header().Set("Content-Type", "application/zip")
+	w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": name + ".zip"}))
+	w.Header().Set("Cache-Control", "no-store")
+	if _, err := io.Copy(w, reader); err != nil {
+		s.logger.Warn("stream zip", "error", err)
+	}
+}
+
+// zipName names the archive after the folder the selection came from.
+func zipName(rels []string) string {
+	parent := path.Dir(rels[0])
+	for _, rel := range rels[1:] {
+		if path.Dir(rel) != parent {
+			return "files"
+		}
+	}
+	if parent == "." || parent == "/" {
+		return "files"
+	}
+	return path.Base(parent)
 }
 
 func (s *Server) handleFilePreview(w http.ResponseWriter, r *http.Request) {
