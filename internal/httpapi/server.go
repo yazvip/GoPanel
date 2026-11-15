@@ -443,9 +443,9 @@ func (s *Server) serveStatic(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	if r.URL.Path == "/" || r.URL.Path == "/index.html" {
-		w.Header().Set("Cache-Control", "no-cache")
-	}
+	// The assets are embedded in the binary, so a browser that keeps them
+	// would keep running the previous version of the panel after an upgrade.
+	w.Header().Set("Cache-Control", "no-cache")
 	if r.URL.Path == "/" || !strings.Contains(path.Base(r.URL.Path), ".") {
 		clone := r.Clone(r.Context())
 		clone.URL.Path = "/"
