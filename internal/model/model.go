@@ -74,6 +74,16 @@ type Database struct {
 	CreatedAt   int64  `json:"created_at"`
 }
 
+type APIToken struct {
+	ID         int64  `json:"id"`
+	UserID     int64  `json:"user_id"`
+	Name       string `json:"name"`
+	Prefix     string `json:"prefix"`
+	CreatedAt  int64  `json:"created_at"`
+	LastUsedAt int64  `json:"last_used_at"`
+	ExpiresAt  int64  `json:"expires_at"`
+}
+
 type Backup struct {
 	ID        string `json:"id"`
 	Kind      string `json:"kind"`

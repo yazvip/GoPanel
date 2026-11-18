@@ -72,6 +72,7 @@ Kecuali ditandai khusus, halaman baca tersedia untuk semua pengguna yang sudah l
 - **Terminal (admin)** — terminal web berbasis PTY dan WebSocket. Tiket terminal berumur 30 detik, sekali pakai, terikat pada user dan IP; sesi idle ditutup setelah 30 menit. Shell berjalan sebagai root (`/bin/bash -l`) pada implementasi Linux.
 - **Antrean tugas** — job latar dengan worker terbatas, event SSE untuk progres/log, dan berkas log per job. Job yang terputus saat panel berhenti ditandai saat start berikutnya.
 - **Pengguna (admin)** — buat/ubah/hapus pengguna, atur role (`admin`, `operator`, `viewer`), locale, reset password, dan nonaktifkan akun. Panel mencegah penghapusan/penurunan role admin terakhir.
+- **Server MCP** — endpoint `/mcp` (Streamable HTTP) dengan 59 tool untuk situs, database, berkas, cron, backup, firewall, aplikasi, layanan, pengguna, pengaturan, audit, dan PHP, plus `panel_api`/`panel_routes` untuk seluruh REST API dan `run_command` khusus admin. Autentikasi memakai API token milik pengguna, sehingga hak akses mengikuti role pemiliknya.
 - **Log audit (admin)** — mencatat login, perubahan konfigurasi/data, penolakan izin, dan aksi sensitif lain. Pembersihan otomatis dijadwalkan; default retensi audit 90 hari dan job 30 hari.
 - **Pengaturan (admin)** — nama panel, locale, tema (`system`/`light`/`dark`), email dan mode staging ACME, serta unggah sertifikat TLS panel. Perubahan TLS memerlukan restart.
 - **Akun saya** — ganti password (sesi lain dicabut), aktifkan/nonaktifkan TOTP 2FA, membuat 10 kode pemulihan sekali pakai, dan mencabut sesi aktif.
@@ -212,7 +213,56 @@ Catatan penting: pada build **Linux**, `-dev` tetap memakai implementasi sistem 
 | `-config` | `config.json` | Path berkas konfigurasi JSON. |
 | `-dev` | `false` | Memakai default pengembangan dan melewati kewajiban ganti password admin pertama. |
 | `-listen` | kosong | Override alamat listen; tidak disimpan ke config. |
+| `-api-token` | kosong | Membuat API token baru bernama nilai flag ini, mencetaknya ke stdout, lalu keluar tanpa menjalankan layanan. |
+| `-api-token-days` | `90` | Masa berlaku token dari `-api-token` dalam hari; `0` berarti tidak pernah kedaluwarsa. |
 | `-version` | `false` | Cetak versi lalu keluar. |
+
+## Server MCP
+
+Panel menyediakan MCP (Model Context Protocol) server berbasis Streamable HTTP di `https://<panel>/mcp`, sehingga klien AI dapat mengendalikan panel lewat satu URL.
+
+### Membuat token
+
+Lewat UI: **Pengaturan → MCP & token API → Buat token**. Token (prefix `gpm_`, 47 karakter) hanya ditampilkan sekali.
+
+Lewat CLI di server (tidak menjalankan layanan, langsung keluar setelah mencetak token):
+
+```bash
+sudo /opt/gopanel/gopanel -config /etc/gopanel/config.json -api-token "claude" -api-token-days 90
+```
+
+`-api-token-days 0` membuat token tanpa kedaluwarsa. Token disimpan sebagai hash SHA-256; menghapusnya dari halaman Pengaturan langsung mencabut aksesnya. Token juga berlaku untuk seluruh REST API dan melewati CSRF karena tidak memakai cookie sesi.
+
+### Menyambungkan klien AI
+
+Token dapat dikirim lewat header `Authorization: Bearer <token>`, `X-API-Key`, atau query `?token=` (praktis untuk klien yang hanya bisa dikonfigurasi lewat URL):
+
+```json
+{
+  "mcpServers": {
+    "gopanel": {
+      "type": "http",
+      "url": "https://panel.example.com/mcp?token=gpm_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    }
+  }
+}
+```
+
+Verifikasi cepat tanpa klien MCP:
+
+```bash
+curl -sS https://panel.example.com/mcp \
+  -H "Authorization: Bearer $GOPANEL_TOKEN" \
+  -H "Accept: application/json, text/event-stream" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}'
+```
+
+### Cakupan tool
+
+Tool MCP memanggil API panel dengan token pemanggil, sehingga validasi, audit, dan atribusi pengguna sama seperti aksi dari UI. Selain tool per modul, tersedia `panel_routes` (daftar endpoint dan role yang diizinkan) dan `panel_api` (memanggil endpoint REST mana pun) untuk operasi yang belum punya tool khusus, serta `run_command` (khusus admin) untuk menjalankan perintah shell di server.
+
+> ⚠️ **Keamanan:** token admin setara akses root — `run_command` dan tool lain dapat mengubah konfigurasi server. Jangan membagikan URL yang memuat token, gunakan TLS, dan buat token dengan role serendah mungkin untuk kebutuhan klien.
 
 ## Konfigurasi
 
@@ -442,6 +492,7 @@ Buka port panel (`7800` atau nilai `listen`) dan port situs (`80`/`443`). Saat U
 - **Rate limit**: login dibatasi 5 kegagalan per 15 menit untuk kombinasi IP+username; endpoint API dibatasi 1200 permintaan per menit per IP.
 - **2FA**: TOTP dengan 10 kode pemulihan sekali pakai; token pra-autentikasi berlaku 5 menit.
 - **RBAC**: role `admin`, `operator`, `viewer`. Pengguna, pengaturan, audit, tiket terminal, dan WebSocket terminal khusus admin.
+- **API token dan MCP**: token `gpm_` disimpan sebagai hash SHA-256, melewati CSRF (tanpa cookie), dan hak aksesnya mengikuti role pemilik saat permintaan dievaluasi. Token admin memberi akses penuh, termasuk `/mcp`; cabut token yang tidak dipakai dari halaman Pengaturan.
 - **Terminal**: tiket 30 detik, sekali pakai, terikat user dan IP; koneksi WebSocket harus same-origin; idle 30 menit; shell berjalan sebagai root. Nonaktifkan dengan `terminal_enabled: false` bila tidak diperlukan.
 - **Enkripsi**: password database dan secret TOTP dienkripsi AES-GCM dengan `secret.key` 32 byte; berkas kunci dibuat dengan mode `0600`.
 - **Audit**: aksi sensitif dan penolakan izin dicatat; retensi default 90 hari.

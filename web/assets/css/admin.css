@@ -167,6 +167,42 @@
 .admin-page .adm-copy-row > .ellipsis { min-width: 0; }
 .admin-page .adm-copy-row .icon-btn { width: 30px; height: 30px; border-radius: 7px; flex: 0 0 auto; }
 
+/* A freshly minted token is shown once, so it gets its own boxed panel and the
+   value wraps instead of widening the card. */
+.admin-page .adm-token-box {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--panel-2);
+}
+.admin-page .adm-token-box .hint { margin-top: 4px; }
+.admin-page .adm-token-value {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--panel-3);
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
+/* Token rows: the name column carries the label over its prefix, and every
+   column has a width so the action button is never squeezed off the card. */
+.admin-page .adm-t-tokens { margin-top: 16px; }
+.admin-page .adm-t-tokens table.table { min-width: 600px; }
+.admin-page .adm-t-tokens table.table th.adm-col-name { width: 32%; }
+.admin-page .adm-t-tokens table.table th.adm-col-created { width: 17%; }
+.admin-page .adm-t-tokens table.table th.adm-col-used { width: 20%; }
+.admin-page .adm-t-tokens table.table th.adm-col-expires { width: 17%; }
+.admin-page .adm-t-tokens table.table th.col-actions { width: 14%; }
+.admin-page .adm-token-name b,
+.admin-page .adm-token-name span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* The label/value list keeps a fixed label column and lets the value shrink,
    so a long path wraps inside its own cell instead of pushing the card wide. */
 .admin-page .kv-rows dd { min-width: 0; }

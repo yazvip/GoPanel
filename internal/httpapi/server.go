@@ -75,6 +75,7 @@ type Server struct {
 	limit    *ipLimiter
 	handlers []routeDescription
 	finder   *elfinder.Connector
+	mcp      http.Handler
 }
 
 type routeDescription struct {
@@ -90,6 +91,9 @@ const principalKey ctxKey = 1
 type Principal struct {
 	User    *model.User
 	Session *model.Session
+	// TokenID is set when the request authenticated with an API token instead
+	// of a browser session; such requests carry no CSRF secret.
+	TokenID int64
 }
 
 func New(deps Deps) (*Server, error) {
@@ -117,6 +121,7 @@ func New(deps Deps) (*Server, error) {
 		}
 	}
 	s.routes()
+	s.mcp = s.newMCPHandler()
 	return s, nil
 }
 
@@ -124,6 +129,10 @@ func (s *Server) Handler() http.Handler {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, APIPrefix+"/") || r.URL.Path == APIPrefix {
 			s.mux.ServeHTTP(w, r)
+			return
+		}
+		if r.URL.Path == "/mcp" || strings.HasPrefix(r.URL.Path, "/mcp/") {
+			s.mcp.ServeHTTP(w, r)
 			return
 		}
 		s.serveStatic(w, r)
@@ -146,6 +155,10 @@ func (s *Server) routes() {
 	s.handle(http.MethodPost, "/auth/2fa/recovery", s.handle2FARecovery)
 	s.handle(http.MethodGet, "/auth/sessions", s.handleListSessions)
 	s.handle(http.MethodDelete, "/auth/sessions/{id}", s.handleDeleteSession)
+
+	s.handle(http.MethodGet, "/tokens", s.handleListTokens)
+	s.handle(http.MethodPost, "/tokens", s.handleCreateToken)
+	s.handle(http.MethodDelete, "/tokens/{id}", s.handleDeleteToken)
 
 	s.handleRoles(http.MethodGet, "/users", only(RoleAdmin), s.handleListUsers)
 	s.handleRoles(http.MethodPost, "/users", only(RoleAdmin), s.handleCreateUser)
@@ -326,13 +339,24 @@ func (s *Server) publicCSRF(handler http.HandlerFunc) http.HandlerFunc {
 
 func (s *Server) principalFrom(r *http.Request) (*Principal, error) {
 	user, sess, err := s.Auth.SessionFromRequest(r.Context(), r)
-	if err != nil {
+	if err == nil {
+		return &Principal{User: user, Session: sess}, nil
+	}
+	raw := s.Auth.TokenFromRequest(r)
+	if raw == "" {
 		return nil, err
 	}
-	return &Principal{User: user, Session: sess}, nil
+	tokenUser, token, terr := s.Auth.TokenUser(r.Context(), raw)
+	if terr != nil {
+		return nil, err
+	}
+	return &Principal{User: tokenUser, TokenID: token.ID}, nil
 }
 
 func (s *Server) checkCSRF(r *http.Request, p *Principal) error {
+	if p.TokenID != 0 {
+		return nil
+	}
 	if origin := r.Header.Get("Origin"); origin != "" {
 		u, err := url.Parse(origin)
 		if err != nil || !strings.EqualFold(u.Host, r.Host) {

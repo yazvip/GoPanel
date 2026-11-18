@@ -64,6 +64,8 @@ func run() error {
 		listen      = flag.String("listen", "", "override the listen address")
 		showVersion = flag.Bool("version", false, "print the version and exit")
 		resetAdmin  = flag.Bool("reset-admin", false, "reset the administrator password and exit (stop the service first)")
+		tokenName   = flag.String("api-token", "", "create an API token for the administrator with this name and exit (stop the service first)")
+		tokenDays   = flag.Int("api-token-days", 90, "lifetime of the token created by -api-token in days, 0 means never expires")
 	)
 	flag.Parse()
 	if *showVersion {
@@ -121,6 +123,10 @@ func run() error {
 		// the journal.
 		logger.Warn("created the first administrator", "username", adminUser, "must_change_password", !cfg.Dev)
 		fmt.Printf("\n  GoPanel first administrator\n  username: %s\n  password: %s\n\n", adminUser, adminPassword)
+	}
+
+	if *tokenName != "" {
+		return createAdminAPIToken(st, authService, *tokenName, *tokenDays)
 	}
 
 	metricsService := metrics.New(st, system, logger, metrics.Options{})
@@ -340,23 +346,9 @@ func resetAdminPassword(st *store.Store) error {
 		}
 	}
 
-	user, err := st.GetUserByUsername(ctx, "admin")
+	user, err := firstAdmin(ctx, st)
 	if err != nil {
-		users, listErr := st.ListUsers(ctx)
-		if listErr != nil {
-			return fmt.Errorf("look up administrator: %w", err)
-		}
-		var found *model.User
-		for i := range users {
-			if users[i].Role == "admin" {
-				found = &users[i]
-				break
-			}
-		}
-		if found == nil {
-			return fmt.Errorf("no administrator account found: %w", err)
-		}
-		user = found
+		return err
 	}
 
 	hash, err := auth.HashPassword(password)
@@ -371,5 +363,52 @@ func resetAdminPassword(st *store.Store) error {
 	}
 
 	fmt.Printf("\n  GoPanel administrator password reset\n  username: %s\n  password: %s\n\n", user.Username, password)
+	return nil
+}
+
+// firstAdmin returns the account named "admin" when it exists, otherwise the
+// first administrator by id.
+func firstAdmin(ctx context.Context, st *store.Store) (*model.User, error) {
+	user, err := st.GetUserByUsername(ctx, "admin")
+	if err == nil {
+		return user, nil
+	}
+	users, listErr := st.ListUsers(ctx)
+	if listErr != nil {
+		return nil, fmt.Errorf("look up administrator: %w", err)
+	}
+	for i := range users {
+		if users[i].Role == "admin" {
+			return &users[i], nil
+		}
+	}
+	return nil, fmt.Errorf("no administrator account found: %w", err)
+}
+
+// createAdminAPIToken implements `gopanel -api-token "<name>"`. The raw token
+// is printed once and only its hash is stored, so it cannot be recovered
+// later.
+func createAdminAPIToken(st *store.Store, svc *auth.Service, name string, days int) error {
+	if days < 0 {
+		return errors.New("api-token-days must not be negative")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	user, err := firstAdmin(ctx, st)
+	if err != nil {
+		return err
+	}
+	raw, tok, err := svc.CreateAPIToken(ctx, user.ID, name, time.Duration(days)*24*time.Hour)
+	if err != nil {
+		return err
+	}
+	expires := "never"
+	if tok.ExpiresAt > 0 {
+		expires = time.Unix(tok.ExpiresAt, 0).Format("2006-01-02 15:04")
+	}
+	fmt.Printf("\n  GoPanel API token created\n  name: %s\n  user: %s\n  prefix: %s\n  expires: %s\n  token: %s\n\n"+
+		"  Use it as: Authorization: Bearer <token>\n  MCP endpoint: https://<panel-host>/mcp?token=<token>\n\n",
+		tok.Name, user.Username, tok.Prefix, expires, raw)
 	return nil
 }
